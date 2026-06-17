@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>안심 비서 — 말로 하는 어르신 송금</title>
+<!-- QR은 브라우저 안에서 생성됩니다(계좌번호가 외부로 나가지 않음). 오프라인이면 링크 복사로 대체. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --bg: #eef2f9;
+    --card: #ffffff;
+    --ink: #16202e;
+    --muted: #5c6675;
+    --line: #e2e7f0;
+    --brand: #2f6df0;
+    --brand-d: #2257cf;
+    --brand-soft: #e8f0ff;
+    --safe: #1aa260;
+    --safe-soft: #e3f7ed;
+    --danger: #e03b3b;
+    --danger-soft: #fde7e7;
+    --warn: #d98300;
+    --warn-soft: #fff2da;
+    --shadow: 0 10px 34px rgba(20, 30, 60, 0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Pretendard", -apple-system, "Malgun Gothic", system-ui, sans-serif;
+    background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased;
+    min-height: 100vh; padding: 24px 16px 60px;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; display: grid; grid-template-columns: 420px 1fr; gap: 26px; align-items: start; }
+  @media (max-width: 920px) { .wrap { grid-template-columns: 1fr; } .side { order: 2; } }
+
+  .brandbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 11px; margin-bottom: 4px; }
+  .brandbar .dot { width: 36px; height: 36px; border-radius: 11px; background: linear-gradient(135deg, #2f6df0, #6aa3ff); display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 18px; }
+  .brandbar b { font-size: 21px; }
+  .brandbar small { color: var(--muted); font-size: 13px; }
+
+  /* ---------- Phone (어르신 화면) ---------- */
+  .phone { background: var(--card); border-radius: 30px; box-shadow: var(--shadow); overflow: hidden; border: 1px solid var(--line); }
+  .phone .head { background: linear-gradient(135deg, #2f6df0, #6aa3ff); color: #fff; padding: 22px 22px 20px; }
+  .phone .head .hi { font-size: 23px; font-weight: 800; }
+  .phone .head .sub { font-size: 15px; opacity: .92; margin-top: 5px; }
+  .screen { padding: 22px; min-height: 430px; display: flex; flex-direction: column; }
+
+  /* mic */
+  .mic-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; margin: 10px 0 6px; }
+  .mic {
+    width: 132px; height: 132px; border-radius: 50%; border: 0; cursor: pointer;
+    background: radial-gradient(circle at 50% 38%, #4a86ff, #2257cf);
+    color: #fff; font-size: 46px; box-shadow: 0 12px 30px rgba(47,109,240,.45);
+    display: grid; place-items: center; position: relative; transition: transform .08s;
+  }
+  .mic:active { transform: scale(.96); }
+  .mic.listening { animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%{ box-shadow:0 0 0 0 rgba(47,109,240,.5);} 100%{ box-shadow:0 0 0 26px rgba(47,109,240,0);} }
+  .mic-label { font-size: 19px; font-weight: 800; }
+  .mic-hint { font-size: 14px; color: var(--muted); text-align: center; line-height: 1.5; }
+
+  .transcript { background: var(--bg); border-radius: 16px; padding: 16px; margin-top: 14px; font-size: 19px; font-weight: 700; text-align: center; min-height: 60px; display: flex; align-items: center; justify-content: center; }
+  .transcript.empty { color: #aab1bd; font-weight: 600; font-size: 16px; }
+
+  .quick { margin-top: 18px; }
+  .quick .label { font-size: 14px; color: var(--muted); margin-bottom: 9px; font-weight: 700; }
+  .people { display: flex; gap: 12px; flex-wrap: wrap; }
+  .person { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
+  .avatar { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; background: var(--brand-soft); border: 2px solid transparent; }
+  .person:hover .avatar { border-color: var(--brand); }
+  .person .nm { font-size: 13px; font-weight: 700; }
+
+  /* confirm card (큰 글씨 확인) */
+  .confirm { display: none; flex-direction: column; gap: 16px; }
+  .confirm.show { display: flex; animation: fade .2s; }
+  @keyframes fade { from{opacity:0; transform:translateY(8px);} to{opacity:1;} }
+  .confirm .who-big { display: flex; align-items: center; gap: 14px; background: var(--bg); border-radius: 18px; padding: 16px; }
+  .confirm .who-big .avatar { width: 64px; height: 64px; font-size: 30px; }
+  .confirm .who-big .nm { font-size: 22px; font-weight: 800; }
+  .confirm .who-big .rel { font-size: 14px; color: var(--muted); }
+  .amount-line { text-align: center; font-size: 19px; line-height: 1.6; }
+  .amount-line b { font-size: 34px; color: var(--brand-d); }
+  .flag { display: flex; gap: 10px; align-items: flex-start; padding: 14px; border-radius: 14px; font-size: 14.5px; line-height: 1.5; }
+  .flag.warn { background: var(--warn-soft); color: #8a5300; }
+  .flag.danger { background: var(--danger-soft); color: #a51d1d; }
+  .flag.safe { background: var(--safe-soft); color: #0d6b40; }
+  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .btn { border: 0; border-radius: 16px; padding: 20px; font-size: 20px; font-weight: 800; cursor: pointer; transition: transform .06s; }
+  .btn:active { transform: scale(.97); }
+  .btn.go { background: var(--safe); color: #fff; }
+  .btn.cancel { background: #eceff4; color: #444; }
+  .btn.ask { grid-column: 1 / -1; background: var(--warn-soft); color: #8a5300; font-size: 17px; padding: 15px; }
+
+  /* result */
+  .result { display: none; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding-top: 20px; }
+  .result.show { display: flex; animation: fade .2s; }
+  .result .big-ic { width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center; font-size: 50px; background: var(--safe-soft); }
+  .result .msg { font-size: 24px; font-weight: 800; }
+  .result .sub { font-size: 16px; color: var(--muted); line-height: 1.5; }
+  .btn.again { background: var(--brand); color: #fff; margin-top: 8px; padding: 16px 30px; }
+
+  /* 토스 핸드오프 패널 */
+  .dl-panel { width: 100%; background: var(--bg); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .dl-panel .qr { background: #fff; padding: 10px; border-radius: 12px; line-height: 0; }
+  .dl-panel .qr img, .dl-panel .qr canvas { display: block; }
+  .dl-link { font-size: 11.5px; color: var(--muted); word-break: break-all; text-align: center; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px; width: 100%; }
+  .dl-actions { display: flex; gap: 10px; width: 100%; }
+  .dl-actions .btn { flex: 1; padding: 14px; font-size: 15px; }
+  .btn.toss { background: #0064ff; color: #fff; }
+  .btn.copy { background: #eceff4; color: #333; }
+  .dl-hint { font-size: 12.5px; color: var(--muted); line-height: 1.5; text-align: center; }
+  .dl-hint b { color: var(--ink); }
+
+  /* ---------- Side: 자녀 연계 + 설명 ---------- */
+  .side { display: flex; flex-direction: column; gap: 18px; }
+  .card { background: var(--card); border-radius: 20px; border: 1px solid var(--line); box-shadow: var(--shadow); padding: 22px; }
+  .card h3 { font-size: 16px; margin-bottom: 3px; }
+  .card .csub { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+  .notif { display: flex; gap: 11px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+  .notif:first-of-type { border-top: 0; }
+  .notif .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: 0 0 auto; background: var(--brand-soft); }
+  .notif .nb .nt { font-weight: 700; }
+  .notif .nb .nd { color: var(--muted); margin-top: 2px; line-height: 1.4; }
+  .empty-notif { color: #aab1bd; font-size: 13.5px; text-align: center; padding: 16px 0; }
+  .how li { font-size: 13.5px; color: var(--muted); margin: 8px 0 8px 18px; line-height: 1.5; }
+  .how b { color: var(--ink); }
+  .api-note { font-size: 12px; color: var(--muted); background: var(--bg); padding: 12px; border-radius: 12px; line-height: 1.5; }
+  .api-note code { background: #e6eaf1; padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(80px); background: #16202e; color: #fff; padding: 14px 22px; border-radius: 14px; font-weight: 700; box-shadow: var(--shadow); opacity: 0; transition: .3s; z-index: 60; }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brandbar">
+    <div class="dot">안</div>
+    <div><b>안심 비서</b> &nbsp;<small>· 말로 하는 어르신 송금</small></div>
+  </div>
+
+  <!-- ============ 어르신 폰 화면 ============ -->
+  <div class="phone">
+    <div class="head">
+      <div class="hi">순자 님, 안녕하세요 😊</div>
+      <div class="sub">보낼 사람과 금액을 말씀만 하세요.</div>
+    </div>
+    <div class="screen">
+      <!-- STEP 1: 듣기 -->
+      <div id="step-listen">
+        <div class="mic-wrap">
+          <button id="mic" class="mic" onclick="toggleMic()">🎤</button>
+          <div class="mic-label" id="mic-label">눌러서 말하기</div>
+          <div class="mic-hint">예) "둘째한테 오만원 보내줘"<br>"관리비 십이만원 내줘"</div>
+        </div>
+        <div id="transcript" class="transcript empty">여기에 말씀하신 내용이 보여요</div>
+        <div class="quick">
+          <div class="label">자주 보내는 사람</div>
+          <div class="people">
+            <div class="person" onclick="quickPick('큰아들')"><div class="avatar">👨</div><div class="nm">큰아들</div></div>
+            <div class="person" onclick="quickPick('둘째딸')"><div class="avatar">👩</div><div class="nm">둘째딸</div></div>
+            <div class="person" onclick="quickPick('손녀')"><div class="avatar">👧</div><div class="nm">손녀</div></div>
+            <div class="person" onclick="quickPick('관리비')"><div class="avatar">🏢</div><div class="nm">관리비</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2: 큰글씨 확인 -->
+      <div id="step-confirm" class="confirm">
+        <div class="who-big">
+          <div class="avatar" id="c-avatar">👨</div>
+          <div><div class="nm" id="c-name">큰아들</div><div class="rel" id="c-rel">김철수 · 국민은행 ***1234</div></div>
+        </div>
+        <div class="amount-line">이 분께<br><b id="c-amount">50,000원</b><br>보낼까요?</div>
+        <div id="c-flag" class="flag safe"></div>
+        <div class="btns">
+          <button class="btn cancel" onclick="reset()">아니요</button>
+          <button class="btn go" id="c-go" onclick="doSend()">네, 보내요</button>
+          <button class="btn ask" id="c-ask" onclick="askChild()" style="display:none">🙋 큰아들에게 먼저 확인받기</button>
+        </div>
+      </div>
+
+      <!-- STEP 3: 완료 / 토스 핸드오프 -->
+      <div id="step-result" class="result">
+        <div class="big-ic" id="r-ic">✅</div>
+        <div class="msg" id="r-msg">보냈어요!</div>
+        <div class="sub" id="r-sub"></div>
+        <div id="dl-panel" class="dl-panel" style="display:none">
+          <div id="qr" class="qr"></div>
+          <div id="dl-link" class="dl-link"></div>
+          <div class="dl-actions">
+            <button class="btn toss" onclick="openToss()">📲 토스 열기</button>
+            <button class="btn copy" onclick="copyLink()">계좌·금액 복사</button>
+          </div>
+          <div class="dl-hint">휴대폰에서 <b>QR을 스캔</b>하거나 <b>토스 열기</b>를 누르면<br>토스 송금화면이 떠요. (PC에서는 안 열려요)</div>
+        </div>
+        <button class="btn again" onclick="reset()">처음으로</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 옆: 자녀 연계 + 설명 ============ -->
+  <div class="side">
+    <div class="card">
+      <h3>👨‍👩‍👧 자녀에게 가는 알림</h3>
+      <div class="csub">송금·이상 상황이 생기면 자녀 폰으로 바로 전해져요.</div>
+      <div id="notif-list"><div class="empty-notif">아직 알림이 없어요. 왼쪽에서 송금을 해보세요.</div></div>
+    </div>
+
+    <div class="card">
+      <h3>이 비서가 푸는 진짜 문제</h3>
+      <ul class="how">
+        <li><b>배움이 필요 없는 인터페이스.</b> 앱 단계를 외울 필요 없이 <b>말 한마디</b>로 끝납니다.</li>
+        <li><b>안전 가드.</b> 처음 보내는 계좌·고액·사기 정황은 자동으로 잡아 <b>자녀 확인</b>으로 돌립니다.</li>
+        <li><b>자녀 안심.</b> 모든 송금이 자녀에게 공유돼, 멀리 사는 가족도 마음을 놓습니다.</li>
+      </ul>
+      <div class="api-note">
+        💡 "보내요"를 누르면 <b>실제 <code>supertoss://send</code> 딥링크</b>를 만들어 QR·링크로 띄웁니다.
+        어머니 폰(토스 설치)에서 QR을 찍거나 링크를 열면 <b>진짜 토스 송금화면</b>이 떠요.
+        명령 해석은 추후 <code>claude-opus-4-8</code>로, 딥링크가 비공식인 점은 <code>README.md</code> 참고.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  /* ---------- 등록된 수취인 (예시 데이터) ---------- */
+  /* bank/accountNo는 supertoss://send 딥링크에 들어갑니다.
+     아래는 예시 데이터이며, 실제로는 어머니의 진짜 수취인으로 교체하세요. */
+  const PEOPLE = {
+    "큰아들":   { name: "큰아들 김철수", rel: "국민은행 ***4567",   bank: "국민",     accountNo: "12345601234567", avatar: "👨", known: true, alias: ["큰아들","철수","첫째"] },
+    "둘째딸":   { name: "둘째딸 김영희", rel: "신한은행 ***6789",   bank: "신한",     accountNo: "110123456789",   avatar: "👩", known: true, alias: ["둘째","둘째딸","영희"] },
+    "손녀":     { name: "손녀 김지윤",   rel: "카카오뱅크 ***5678", bank: "카카오뱅크", accountNo: "3333012345678",  avatar: "👧", known: true, alias: ["손녀","지윤"] },
+    "관리비":   { name: "행복아파트 관리비", rel: "우리은행 ***8901", bank: "우리",     accountNo: "1002345678901",  avatar: "🏢", known: true, alias: ["관리비","아파트"] },
+  };
+  const HIGH_AMOUNT = 300000; // 고액 기준: 30만원 이상이면 자녀 확인 권유
+
+  let listening = false, recog = null, pending = null, lastDeepLink = "";
+
+  /* ---------- 음성 인식 (가능하면 실제, 아니면 안내) ---------- */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  function toggleMic() {
+    if (!SR) {  // 미지원 브라우저: 예시 명령으로 대체
+      showToast("이 브라우저는 음성이 안 돼요. 아래 사람을 눌러보세요");
+      setTranscript('"둘째딸한테 오만원 보내줘"');
+      handleCommand("둘째딸한테 오만원 보내줘");
+      return;
+    }
+    listening ? stopMic() : startMic();
+  }
+  function startMic() {
+    recog = new SR();
+    recog.lang = "ko-KR"; recog.interimResults = true; recog.maxAlternatives = 1;
+    listening = true;
+    document.getElementById('mic').classList.add('listening');
+    document.getElementById('mic-label').textContent = "듣고 있어요…";
+    setTranscript("…");
+    recog.onresult = (e) => {
+      let txt = "";
+      for (const r of e.results) txt += r[0].transcript;
+      setTranscript('"' + txt + '"');
+      if (e.results[e.results.length - 1].isFinal) { stopMic(); handleCommand(txt); }
+    };
+    recog.onerror = () => { stopMic(); showToast("잘 안 들렸어요. 다시 한번 말씀해 주세요"); };
+    recog.onend = () => stopMic();
+    recog.start();
+  }
+  function stopMic() {
+    listening = false;
+    if (recog) { try { recog.stop(); } catch(e){} }
+    document.getElementById('mic').classList.remove('listening');
+    document.getElementById('mic-label').textContent = "눌러서 말하기";
+  }
+  function setTranscript(t) {
+    const el = document.getElementById('transcript');
+    el.textContent = t; el.classList.toggle('empty', !t || t === "…");
+  }
+
+  /* ---------- 빠른 선택 (사람 누르기) ---------- */
+  function quickPick(key) {
+    setTranscript('"' + key + '한테 보내기"');
+    // 금액은 기본 예시로 5만원, 실제론 다음 단계에서 음성/숫자패드로 입력
+    buildConfirm(key, 50000, "(금액은 말씀하시거나 숫자로 입력)");
+  }
+
+  /* ---------- 명령 해석 (데모: 규칙 기반) ----------
+     실서비스: 이 함수가 Claude API 호출로 대체됨 (README 참고).
+     "둘째딸한테 오만원 보내줘" -> { person, amount } */
+  function parseAmount(text) {
+    // 1) 아라비아 숫자 + 만/천원
+    let m = text.replace(/,/g,"").match(/(\d+)\s*만\s*(\d+)?\s*천?/);
+    if (m) return (+m[1])*10000 + (m[2] ? (+m[2])*1000 : 0);
+    m = text.replace(/,/g,"").match(/(\d{3,})\s*원/);
+    if (m) return +m[1];
+    // 2) 한글 숫자(간이): 일~십 + 만/천
+    const K = {영:0,일:1,이:2,삼:3,사:4,오:5,육:6,칠:7,팔:8,구:9,십:10};
+    let man = text.match(/([일이삼사오육칠팔구십]+)\s*만/);
+    let cheon = text.match(/([일이삼사오육칠팔구십]+)\s*천/);
+    function kval(s){ if(!s) return 0; let t=0; if(s.includes("십")){ const a=s.split("십"); t=(a[0]?K[a[0]]:1)*10 + (a[1]?K[a[1]]:0);} else { for(const c of s) t=t*10+(K[c]||0);} return t; }
+    let total = kval(man && man[1])*10000 + kval(cheon && cheon[1])*1000;
+    return total || null;
+  }
+  function findPerson(text) {
+    for (const key in PEOPLE) {
+      if (PEOPLE[key].alias.some(a => text.includes(a))) return key;
+    }
+    return null;
+  }
+  function handleCommand(text) {
+    const key = findPerson(text);
+    const amount = parseAmount(text);
+    if (!key) { showToast("누구에게 보낼지 못 알아들었어요. 다시 말씀해 주세요"); return; }
+    if (!amount) { buildConfirm(key, 50000, "(금액을 다시 말씀해 주세요)"); showToast("금액을 못 들었어요"); return; }
+    buildConfirm(key, amount, null);
+  }
+
+  /* ---------- 확인 화면 만들기 + 안전 가드 ---------- */
+  function buildConfirm(key, amount, note) {
+    const p = PEOPLE[key];
+    pending = { key, p, amount };
+    document.getElementById('c-avatar').textContent = p.avatar;
+    document.getElementById('c-name').textContent = p.name;
+    document.getElementById('c-rel').textContent = p.rel;
+    document.getElementById('c-amount').textContent = amount.toLocaleString() + "원" + (note ? "  " + note : "");
+
+    const flag = document.getElementById('c-flag');
+    const askBtn = document.getElementById('c-ask');
+    const goBtn = document.getElementById('c-go');
+    askBtn.style.display = "none"; goBtn.style.display = "block";
+
+    if (!p.known) {
+      flag.className = "flag danger";
+      flag.innerHTML = "⛔ <b>처음 보내는 계좌예요.</b> 사기일 수 있으니 자녀에게 먼저 확인받는 걸 권해요.";
+      askBtn.style.display = "block"; goBtn.style.display = "none";
+    } else if (amount >= HIGH_AMOUNT) {
+      flag.className = "flag warn";
+      flag.innerHTML = "⚠️ <b>큰 금액(30만원 이상)이에요.</b> 자녀 확인 후 보내면 더 안전해요.";
+      askBtn.style.display = "block";
+    } else {
+      flag.className = "flag safe";
+      flag.innerHTML = "✅ 자주 보내던 분이에요. 안심하고 보내셔도 돼요.";
+    }
+    show('confirm');
+  }
+
+  /* 실제 토스 핸드오프: supertoss://send 딥링크 생성 + QR + 클립보드 백업 */
+  function buildDeepLink(p, amount) {
+    return "supertoss://send?bank=" + encodeURIComponent(p.bank) +
+           "&accountNo=" + p.accountNo + "&amount=" + amount;
+  }
+  function doSend() {
+    const { p, amount } = pending;
+    const dl = buildDeepLink(p, amount);
+    lastDeepLink = dl;
+    document.getElementById('r-ic').textContent = "📲";
+    document.getElementById('r-ic').style.background = "var(--brand-soft)";
+    document.getElementById('r-msg').textContent = "토스로 보내기";
+    document.getElementById('r-sub').innerHTML = p.name + "께 <b>" + amount.toLocaleString() + "원</b><br>토스 송금화면을 열어요.";
+
+    document.getElementById('dl-link').textContent = dl;
+    const qr = document.getElementById('qr');
+    qr.innerHTML = "";
+    if (window.QRCode) {
+      new QRCode(qr, { text: dl, width: 168, height: 168, correctLevel: QRCode.CorrectLevel.M });
+    } else {
+      qr.innerHTML = "<div style='font-size:12px;color:#888;padding:24px;text-align:center'>QR 생성에 인터넷이 필요해요.<br>아래 링크를 복사해 휴대폰에서 여세요.</div>";
+    }
+    document.getElementById('dl-panel').style.display = "flex";
+
+    // 클립보드 백업: 딥링크가 막혀도 토스가 클립보드를 읽어 송금을 제안함
+    copyText(dl);
+    addNotif("💸", "송금 진행", p.name + " · " + amount.toLocaleString() + "원 (토스로 핸드오프)");
+    show('result');
+  }
+  function openToss() {
+    if (!lastDeepLink) return;
+    window.location.href = lastDeepLink; // 폰+토스 설치 시 송금화면으로 진입
+    setTimeout(() => showToast("토스가 안 열리면, 이 화면을 휴대폰에서 여세요"), 1200);
+  }
+  function copyLink() { copyText(lastDeepLink); showToast("복사됐어요. 휴대폰 토스에 붙여넣으세요"); }
+
+  function askChild() {
+    const { p, amount } = pending;
+    document.getElementById('dl-panel').style.display = "none";
+    document.getElementById('r-ic').textContent = "🙋";
+    document.getElementById('r-ic').style.background = "var(--warn-soft)";
+    document.getElementById('r-msg').textContent = "자녀에게 보냈어요";
+    document.getElementById('r-sub').innerHTML = "큰아들이 확인하면 송금을 이어가요.<br>(" + p.name + " · " + amount.toLocaleString() + "원)";
+    addNotif("🔔", "송금 확인 요청", "어머니가 " + p.name + "께 " + amount.toLocaleString() + "원 송금을 시도했어요. 승인할까요?");
+    show('result');
+  }
+
+  /* 클립보드 복사 (file:// 환경 폴백 포함) */
+  function copyText(t) {
+    try { navigator.clipboard.writeText(t); return; } catch (e) {}
+    const ta = document.createElement('textarea');
+    ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (_) {}
+    ta.remove();
+  }
+
+  /* ---------- 자녀 알림 로그 ---------- */
+  function addNotif(ic, title, desc) {
+    const list = document.getElementById('notif-list');
+    if (list.querySelector('.empty-notif')) list.innerHTML = "";
+    const el = document.createElement('div');
+    el.className = "notif";
+    el.innerHTML = "<div class='ic'>" + ic + "</div><div class='nb'><div class='nt'>" + title + "</div><div class='nd'>" + desc + "</div></div>";
+    list.prepend(el);
+  }
+
+  /* ---------- 화면 전환 ---------- */
+  function show(step) {
+    document.getElementById('step-listen').style.display = (step === 'listen') ? "block" : "none";
+    document.getElementById('step-confirm').classList.toggle('show', step === 'confirm');
+    document.getElementById('step-result').classList.toggle('show', step === 'result');
+  }
+  function reset() {
+    setTranscript(""); show('listen'); pending = null; lastDeepLink = "";
+    document.getElementById('dl-panel').style.display = "none";
+  }
+
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2800);
+  }
+</script>
+</body>
+</html>

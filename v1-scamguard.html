@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>안심 — 부모님 디지털 안심 돌봄</title>
+<style>
+  :root {
+    --bg: #f4f6fb;
+    --card: #ffffff;
+    --ink: #1a2233;
+    --muted: #6b7280;
+    --line: #e6e9f0;
+    --brand: #2f6df0;
+    --brand-soft: #e8f0ff;
+    --danger: #e03b3b;
+    --danger-soft: #fde8e8;
+    --warn: #e08a00;
+    --warn-soft: #fff3df;
+    --safe: #1aa260;
+    --safe-soft: #e4f7ee;
+    --shadow: 0 6px 24px rgba(20, 30, 60, 0.08);
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Pretendard", -apple-system, "Malgun Gothic", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .app { max-width: 1180px; margin: 0 auto; padding: 24px 20px 80px; }
+
+  /* Top bar */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 22px; flex-wrap: wrap; gap: 12px;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 22px; }
+  .logo .dot {
+    width: 34px; height: 34px; border-radius: 11px;
+    background: linear-gradient(135deg, #2f6df0, #6aa3ff);
+    display: grid; place-items: center; color: #fff; font-size: 18px;
+  }
+  .logo small { font-weight: 600; color: var(--muted); font-size: 13px; }
+  .role-toggle { display: flex; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 4px; box-shadow: var(--shadow); }
+  .role-toggle button {
+    border: 0; background: transparent; padding: 9px 18px; border-radius: 999px;
+    font-weight: 700; font-size: 14px; cursor: pointer; color: var(--muted);
+  }
+  .role-toggle button.active { background: var(--brand); color: #fff; }
+
+  .view { display: none; }
+  .view.active { display: block; animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* Guardian (자녀) layout */
+  .grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; }
+  @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow); }
+  .card h2 { font-size: 17px; margin-bottom: 4px; }
+  .card .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+
+  .status-hero { display: flex; align-items: center; gap: 18px; }
+  .status-ring {
+    width: 92px; height: 92px; border-radius: 50%; flex: 0 0 auto;
+    display: grid; place-items: center; font-weight: 800; font-size: 15px; color: #fff;
+    background: conic-gradient(var(--safe) 0 86%, #dfe3ea 86% 100%);
+    position: relative;
+  }
+  .status-ring::after {
+    content: ""; position: absolute; inset: 9px; background: var(--card); border-radius: 50%;
+  }
+  .status-ring span { position: relative; z-index: 1; color: var(--safe); }
+  .status-meta .who { font-size: 20px; font-weight: 800; }
+  .status-meta .desc { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 5px 11px; border-radius: 999px; margin-top: 10px; }
+  .pill.safe { background: var(--safe-soft); color: var(--safe); }
+
+  .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
+  .stat { background: var(--bg); border-radius: 14px; padding: 14px; text-align: center; }
+  .stat .n { font-size: 24px; font-weight: 800; }
+  .stat .l { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .feed-item { display: flex; gap: 13px; padding: 14px 0; border-top: 1px solid var(--line); }
+  .feed-item:first-of-type { border-top: 0; }
+  .ic { width: 40px; height: 40px; border-radius: 12px; flex: 0 0 auto; display: grid; place-items: center; font-size: 19px; }
+  .ic.danger { background: var(--danger-soft); }
+  .ic.warn { background: var(--warn-soft); }
+  .ic.safe { background: var(--safe-soft); }
+  .ic.info { background: var(--brand-soft); }
+  .feed-body .t { font-weight: 700; font-size: 14.5px; }
+  .feed-body .d { color: var(--muted); font-size: 13px; margin-top: 3px; line-height: 1.45; }
+  .feed-body .time { color: #9aa1ad; font-size: 12px; margin-top: 5px; }
+  .tag { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px; margin-left: 8px; }
+  .tag.danger { background: var(--danger-soft); color: var(--danger); }
+  .tag.warn { background: var(--warn-soft); color: var(--warn); }
+
+  /* AI scan box */
+  textarea {
+    width: 100%; min-height: 96px; resize: vertical; border: 1px solid var(--line);
+    border-radius: 12px; padding: 13px; font-size: 14px; font-family: inherit; color: var(--ink);
+  }
+  textarea:focus { outline: 2px solid var(--brand-soft); border-color: var(--brand); }
+  .btn {
+    border: 0; background: var(--brand); color: #fff; font-weight: 800; font-size: 14.5px;
+    padding: 12px 18px; border-radius: 12px; cursor: pointer; transition: transform .05s;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn.full { width: 100%; margin-top: 12px; }
+  .btn.ghost { background: var(--brand-soft); color: var(--brand); }
+  .samples { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .chip { font-size: 12.5px; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 12px; cursor: pointer; color: var(--muted); }
+  .chip:hover { border-color: var(--brand); color: var(--brand); }
+
+  .result { margin-top: 16px; border-radius: 14px; padding: 16px; display: none; }
+  .result.show { display: block; animation: fade .2s ease; }
+  .result.danger { background: var(--danger-soft); }
+  .result.warn { background: var(--warn-soft); }
+  .result.safe { background: var(--safe-soft); }
+  .result .verdict { font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 9px; }
+  .result .score { font-size: 13px; color: var(--muted); margin: 8px 0 12px; }
+  .result ul { margin-left: 18px; }
+  .result li { font-size: 13.5px; margin: 5px 0; line-height: 1.4; }
+  .result .advice { margin-top: 12px; padding: 11px 13px; background: rgba(255,255,255,.65); border-radius: 10px; font-size: 13.5px; font-weight: 600; }
+
+  .api-note { margin-top: 14px; font-size: 12px; color: var(--muted); background: var(--bg); padding: 11px 13px; border-radius: 10px; line-height: 1.5; }
+  .api-note code { background: #eceff5; padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+
+  /* Elderly (어르신) view */
+  .senior { max-width: 440px; margin: 0 auto; }
+  .senior .phone { background: var(--card); border-radius: 28px; border: 1px solid var(--line); box-shadow: var(--shadow); overflow: hidden; }
+  .senior .head { background: linear-gradient(135deg, #2f6df0, #6aa3ff); color: #fff; padding: 26px 22px; }
+  .senior .head .hi { font-size: 26px; font-weight: 800; }
+  .senior .head .sub2 { font-size: 16px; opacity: .9; margin-top: 6px; }
+  .senior .body { padding: 22px; }
+  .big-btn {
+    width: 100%; border: 0; border-radius: 20px; padding: 26px; font-size: 26px; font-weight: 800;
+    color: #fff; background: var(--danger); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 12px;
+    box-shadow: 0 8px 20px rgba(224,59,59,.3);
+  }
+  .big-btn:active { transform: scale(.98); }
+  .msg-card { border: 2px solid var(--line); border-radius: 18px; padding: 18px; margin-top: 18px; }
+  .msg-card .from { font-size: 17px; font-weight: 700; }
+  .msg-card .text { font-size: 16px; color: #333; margin-top: 8px; line-height: 1.5; }
+  .verdict-big { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 800; margin-top: 14px; padding: 14px; border-radius: 14px; }
+  .verdict-big.danger { background: var(--danger-soft); color: var(--danger); }
+  .verdict-big.safe { background: var(--safe-soft); color: var(--safe); }
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(80px);
+    background: #1a2233; color: #fff; padding: 14px 22px; border-radius: 14px; font-weight: 700;
+    box-shadow: var(--shadow); opacity: 0; transition: .3s; z-index: 50;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  .footer-note { text-align: center; color: #9aa1ad; font-size: 12px; margin-top: 28px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="logo">
+      <div class="dot">안</div>
+      <div>안심 <small>· 부모님 디지털 안심 돌봄</small></div>
+    </div>
+    <div class="role-toggle">
+      <button id="tab-guardian" class="active" onclick="switchView('guardian')">자녀(보호자)</button>
+      <button id="tab-senior" onclick="switchView('senior')">어르신 화면</button>
+    </div>
+  </div>
+
+  <!-- ===================== 자녀(보호자) 대시보드 ===================== -->
+  <section id="view-guardian" class="view active">
+    <div class="grid">
+      <div style="display:flex; flex-direction:column; gap:18px;">
+        <!-- 상태 카드 -->
+        <div class="card">
+          <div class="status-hero">
+            <div class="status-ring"><span>안전</span></div>
+            <div class="status-meta">
+              <div class="who">김순자 어머니 (72세)</div>
+              <div class="desc">오늘 사기 시도 2건을 안심이 차단했어요.</div>
+              <span class="pill safe">● 지금 안전 · 5분 전 활동</span>
+            </div>
+          </div>
+          <div class="stat-row">
+            <div class="stat"><div class="n" style="color:var(--danger)">2</div><div class="l">차단한 사기</div></div>
+            <div class="stat"><div class="n" style="color:var(--warn)">1</div><div class="l">주의 알림</div></div>
+            <div class="stat"><div class="n" style="color:var(--brand)">1</div><div class="l">도움 요청</div></div>
+          </div>
+        </div>
+
+        <!-- 활동 피드 -->
+        <div class="card">
+          <h2>실시간 안심 알림</h2>
+          <div class="sub">부모님 휴대폰의 위험 신호를 자녀에게 바로 알려드려요.</div>
+          <div id="feed">
+            <div class="feed-item">
+              <div class="ic danger">🚨</div>
+              <div class="feed-body">
+                <div class="t">택배 사칭 문자 차단<span class="tag danger">위험 92%</span></div>
+                <div class="d">"[CJ대한통운] 주소불일치로 배송보류. 확인 ▶ http://bit.ly/..." 링크 클릭을 막았어요.</div>
+                <div class="time">오늘 14:21</div>
+              </div>
+            </div>
+            <div class="feed-item">
+              <div class="ic danger">🚨</div>
+              <div class="feed-body">
+                <div class="t">기관 사칭 통화 주의<span class="tag danger">위험 88%</span></div>
+                <div class="d">'건강보험공단' 발신번호로 7분 통화. 계좌 언급이 감지되어 알림을 보냈어요.</div>
+                <div class="time">오늘 11:05</div>
+              </div>
+            </div>
+            <div class="feed-item">
+              <div class="ic warn">⚠️</div>
+              <div class="feed-body">
+                <div class="t">처음 보는 앱 설치 시도<span class="tag warn">주의</span></div>
+                <div class="d">알 수 없는 출처의 'TeamView_remote.apk' 설치를 보류했어요.</div>
+                <div class="time">오늘 09:40</div>
+              </div>
+            </div>
+            <div class="feed-item">
+              <div class="ic info">🙋</div>
+              <div class="feed-body">
+                <div class="t">어머니가 도움을 요청했어요</div>
+                <div class="d">"이 문자 진짜인지 봐줘" — 메시지 1건 공유됨.</div>
+                <div class="time">오늘 08:12</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI 사기 탐지 -->
+      <div style="display:flex; flex-direction:column; gap:18px;">
+        <div class="card">
+          <h2>🛡️ AI 사기 탐지</h2>
+          <div class="sub">부모님이 받은 문자·메시지를 붙여넣으면 위험도를 분석합니다.</div>
+          <textarea id="scan-input" placeholder="예: [Web발신] 고객님 명의로 해외결제 89만원 승인되었습니다. 본인 아닐 시 02-XXX-XXXX"></textarea>
+          <div class="samples">
+            <span class="chip" onclick="fillSample(0)">택배 사칭</span>
+            <span class="chip" onclick="fillSample(1)">정부지원금 미끼</span>
+            <span class="chip" onclick="fillSample(2)">자녀 사칭(메신저피싱)</span>
+            <span class="chip" onclick="fillSample(3)">정상 문자</span>
+          </div>
+          <button class="btn full" onclick="runScan()">위험도 분석하기</button>
+          <div id="scan-result" class="result"></div>
+          <div class="api-note">
+            💡 이 데모는 오프라인 휴리스틱으로 동작합니다. 실제 서비스에서는 이 함수가
+            <code>claude-opus-4-8</code> 호출로 대체되어, 맥락·말투·최신 사기 수법까지 판단합니다.
+            연결 방법은 <code>README.md</code> 참고.
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>구독 안내</h2>
+          <div class="sub">자녀가 결제하고, 부모님은 무료로 보호받아요.</div>
+          <div style="display:flex; align-items:baseline; gap:8px; margin:6px 0 10px;">
+            <span style="font-size:30px; font-weight:800;">월 9,900원</span>
+            <span style="color:var(--muted); font-size:13px;">/ 부모님 1인</span>
+          </div>
+          <div style="font-size:13.5px; color:var(--muted); line-height:1.8;">
+            ✓ 24시간 사기·피싱 자동 차단<br>
+            ✓ 위험 발생 시 자녀에게 즉시 알림<br>
+            ✓ 원격 도움 요청 · 화면 함께 보기<br>
+            ✓ 형제·자매 최대 4명까지 함께 보호
+          </div>
+          <button class="btn ghost full">7일 무료로 시작하기</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 어르신 화면 ===================== -->
+  <section id="view-senior" class="view">
+    <div class="senior">
+      <div class="phone">
+        <div class="head">
+          <div class="hi">순자 님, 안녕하세요</div>
+          <div class="sub2">안심이가 곁에서 지켜드리고 있어요 😊</div>
+        </div>
+        <div class="body">
+          <button class="big-btn" onclick="askHelp()">🙋 자녀에게 도움 요청</button>
+
+          <div class="msg-card">
+            <div class="from">📩 방금 받은 문자</div>
+            <div class="text">"[국민건강보험] 환급금 27만원이 있습니다. 아래 링크에서 신청하세요 ▶ http://nhis-refund.xyz"</div>
+            <div class="verdict-big danger">⛔ 위험해요! 누르지 마세요</div>
+            <div style="font-size:14px; color:var(--muted); margin-top:10px; line-height:1.5;">
+              건강보험공단은 문자로 환급 링크를 보내지 않아요. 큰아들에게 자동으로 알려드렸어요.
+            </div>
+          </div>
+
+          <div class="msg-card">
+            <div class="from">📩 어제 받은 문자</div>
+            <div class="text">"엄마 나야~ 폰 고장나서 잠깐 이 번호로 연락해. 급한데 문화상품권 좀 사줄 수 있어?"</div>
+            <div class="verdict-big danger">⛔ 자녀 사칭 의심</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer-note">
+    안심(Ansim) 프로토타입 · 데이터는 모두 예시입니다.<br>
+    화면 상단에서 <b>자녀</b>와 <b>어르신</b> 화면을 전환해 보세요.
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  /* ---------- 화면 전환 ---------- */
+  function switchView(v) {
+    document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
+    document.getElementById('view-' + v).classList.add('active');
+    document.getElementById('tab-guardian').classList.toggle('active', v === 'guardian');
+    document.getElementById('tab-senior').classList.toggle('active', v === 'senior');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  /* ---------- 예시 문자 ---------- */
+  const SAMPLES = [
+    "[CJ대한통운] 고객님 주소불일치로 배송이 보류되었습니다. 주소 재확인 ▶ http://bit.ly/cj-track",
+    "[정부24] 코로나 생활지원금 35만원 신청 대상입니다. 오늘 마감, 지금 신청 ▶ http://gov-support.help",
+    "엄마 나 폰 액정 깨져서 수리맡겼어ㅠ 이 번호로 톡해줘. 급하게 인증 좀 도와줘",
+    "[교보문고] 주문하신 도서 '노년의 지혜'가 발송되었습니다. 운송장 12345678"
+  ];
+  function fillSample(i) {
+    document.getElementById('scan-input').value = SAMPLES[i];
+  }
+
+  /* ---------- AI 사기 탐지 (데모: 휴리스틱) ----------
+     실서비스에서는 아래 analyze()가 Claude API 호출로 대체됩니다.
+     README.md의 'AI 연결' 섹션 참고. */
+  function analyze(text) {
+    const t = text.toLowerCase();
+    let score = 0;
+    const reasons = [];
+
+    const urlMatch = /(http|www\.|bit\.ly|\.xyz|\.help|\.top|\.click)/i.test(text);
+    if (urlMatch) { score += 35; reasons.push("출처 불분명한 단축·외부 링크가 포함돼 있어요."); }
+
+    const orgs = ["건강보험", "국민건강", "정부24", "국세청", "검찰", "경찰", "금융감독", "택배", "cj대한통운", "관세청", "법원"];
+    if (orgs.some(o => t.includes(o))) { score += 25; reasons.push("공공기관·택배사를 사칭하는 전형적 문구예요."); }
+
+    const lures = ["환급", "지원금", "당첨", "승인", "결제", "벌금", "체납", "마감", "오늘", "긴급", "본인 아닐"];
+    const hit = lures.filter(l => t.includes(l));
+    if (hit.length) { score += Math.min(30, hit.length * 12); reasons.push("불안·재촉을 유도하는 표현(" + hit.slice(0,3).join(", ") + ")이 있어요."); }
+
+    const family = ["엄마", "아빠", "나야", "폰 고장", "액정", "인증", "상품권", "급한", "급하게"];
+    const fhit = family.filter(f => t.includes(f));
+    if (fhit.length >= 2) { score += 40; reasons.push("가족을 사칭해 금전·인증을 요구하는 메신저피싱 패턴이에요."); }
+
+    if (/\d{2,4}-\d{3,4}-\d{4}/.test(text) && score > 20) { score += 8; reasons.push("낯선 전화번호로 연락을 유도하고 있어요."); }
+
+    score = Math.min(99, score);
+    let level, verdict, advice;
+    if (score >= 65) {
+      level = "danger"; verdict = "⛔ 위험 — 사기일 가능성이 높아요";
+      advice = "링크를 누르거나 전화하지 마세요. 어머니께 알림을 보내고, 의심되면 112(경찰) 또는 해당 기관 대표번호로 직접 확인하세요.";
+    } else if (score >= 35) {
+      level = "warn"; verdict = "⚠️ 주의 — 의심스러운 부분이 있어요";
+      advice = "발신자가 정말 맞는지 공식 경로로 한 번 더 확인하세요. 개인정보·금전 요구가 있으면 응하지 마세요.";
+    } else {
+      level = "safe"; verdict = "✅ 안전 — 특이 위험 신호는 없어요";
+      reasons.length || reasons.push("사기 패턴이 발견되지 않았어요.");
+      advice = "다만 모르는 링크는 항상 한 번 더 확인하는 습관이 좋아요.";
+    }
+    return { score, level, verdict, reasons, advice };
+  }
+
+  function runScan() {
+    const text = document.getElementById('scan-input').value.trim();
+    const box = document.getElementById('scan-result');
+    if (!text) { box.className = "result warn show"; box.innerHTML = "<div class='verdict'>문자 내용을 먼저 붙여넣어 주세요.</div>"; return; }
+    const r = analyze(text);
+    box.className = "result " + r.level + " show";
+    box.innerHTML =
+      "<div class='verdict'>" + r.verdict + "</div>" +
+      "<div class='score'>위험도 " + r.score + "% · AI 분석 기준</div>" +
+      "<ul>" + r.reasons.map(x => "<li>" + x + "</li>").join("") + "</ul>" +
+      "<div class='advice'>👉 " + r.advice + "</div>";
+  }
+
+  /* ---------- 어르신: 도움 요청 ---------- */
+  function askHelp() {
+    showToast("✅ 큰아들에게 도움 요청을 보냈어요");
+  }
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2600);
+  }
+</script>
+</body>
+</html>
