@@ -433,12 +433,29 @@
     }
     return best; // 가장 구체적인(긴) 별명이 매칭된 사람
   }
+  // "○○에게/한테/께" 패턴에서 받는 사람 이름 추출 (등록 안 된 경우)
+  function extractRecipientName(text) {
+    const m = text.match(/([가-힣A-Za-z]{2,12})\s*(?:에게로|에게|한테로|한테|께)/);
+    return m ? m[1].trim() : null;
+  }
   function handleCommand(text) {
-    const key = findPerson(text);
     const amount = parseAmount(text);
-    if (!key) { showToast("누구에게 보낼지 못 알아들었어요. 다시 말씀해 주세요"); return; }
-    if (!amount) { buildConfirm(key, 50000, "(금액을 다시 말씀해 주세요)"); showToast("금액을 못 들었어요"); return; }
-    buildConfirm(key, amount, null);
+    const key = findPerson(text);
+    // 1) 등록된 수취인 → 바로 다음 단계(평소엔 토스, 고액이면 자녀 확인)
+    if (key) {
+      buildConfirm(key, amount || 50000, amount ? null : "(금액을 다시 말씀해 주세요)");
+      if (!amount) showToast("금액을 못 들었어요");
+      return;
+    }
+    // 2) 등록 안 된 수취인 → 막지 않고, 모르는 분이라 보호자(아들)에게 알려 상의
+    const name = extractRecipientName(text);
+    if (name) {
+      const p = { key:name, name:name, rel:"등록되지 않은 받는 분", bank:"", accountNo:"", avatar:"❓", known:false, alias:[name] };
+      buildConfirmFor(p, amount || 0, null, true);
+      return;
+    }
+    // 3) 이름조차 못 알아들음
+    showToast("누구에게 보낼지 못 알아들었어요. 다시 말씀해 주세요");
   }
 
   /* ---------- 확인 화면 만들기 + 안전 가드 ---------- */
@@ -448,7 +465,7 @@
     document.getElementById('c-avatar').textContent = p.avatar;
     document.getElementById('c-name').textContent = p.name;
     document.getElementById('c-rel').textContent = p.rel;
-    document.getElementById('c-amount').textContent = amount.toLocaleString() + "원" + (note ? "  " + note : "");
+    document.getElementById('c-amount').textContent = (amount ? amount.toLocaleString() + "원" : "금액 미정") + (note ? "  " + note : "");
 
     const flag = document.getElementById('c-flag');
     const askBtn = document.getElementById('c-ask');
@@ -457,7 +474,9 @@
 
     if (!p.known) {
       flag.className = "flag danger";
-      flag.innerHTML = "⛔ <b>처음 보내는 계좌예요.</b> 사기일 수 있으니 자녀에게 먼저 확인받는 걸 권해요.";
+      flag.innerHTML = p.accountNo
+        ? "⛔ <b>처음 보내는 계좌예요.</b> 사기일 수 있으니 큰아들에게 먼저 확인받을게요."
+        : "⚠️ <b>'" + p.name + "'님은 등록되어 있지 않아요.</b> 안전을 위해 큰아들에게 알려 확인할게요.";
       askBtn.style.display = "block"; goBtn.style.display = "none";
     } else if (amount >= HIGH_AMOUNT) {
       flag.className = "flag warn";
@@ -512,18 +531,32 @@
     document.getElementById('dl-panel').style.display = "none";
     document.getElementById('r-ic').textContent = "🙋";
     document.getElementById('r-ic').style.background = "var(--warn-soft)";
-    document.getElementById('r-msg').textContent = "자녀에게 보냈어요";
-    document.getElementById('r-sub').innerHTML = isNew
-      ? "큰아들이 승인하면 송금하고,<br><b>" + p.key + "</b>을(를) 목록에 추가해요."
-      : "큰아들이 확인하면 송금을 이어가요.<br>(" + p.name + " · " + amount.toLocaleString() + "원)";
-    addNotif("🔔", isNew ? "신규 수취인 승인 요청" : "송금 확인 요청",
-      "어머니가 " + p.name + "께 " + amount.toLocaleString() + "원 송금을 시도했어요. 승인할까요?");
+    document.getElementById('r-msg').textContent = "큰아들에게 알렸어요";
+    const amtTxt = amount ? amount.toLocaleString() + "원" : "(금액 미정)";
 
-    // 데모: 승인된 것으로 보고 신규 수취인을 목록에 추가 (③ 신규는 승인 후 추가)
-    if (isNew && !getPerson(p.key)) {
-      people.push({ key:p.key, name:p.name, rel:p.rel, bank:p.bank, accountNo:p.accountNo,
-                    avatar:p.avatar, known:true, alias:[p.key], count:1, lastUsed:Date.now() });
-      savePeople(); renderPeople();
+    if (isNew && !p.accountNo) {
+      // 말로 부른 모르는 분 — 계좌가 없으니 보호자가 확인/등록해야 함 (목록 추가 X)
+      document.getElementById('r-sub').innerHTML =
+        "<b>" + p.name + "</b>님은 등록되어 있지 않아요.<br>큰아들이 받는 분을 확인하면 보낼 수 있어요.";
+      addNotif("🔔", "모르는 받는 분 — 확인 요청",
+        "어머니가 '" + p.name + "'(등록 안 됨)에게 " + amtTxt + "을 보내려 해요. 누군지 확인해 주세요.");
+    } else if (isNew) {
+      // 새로 입력한 계좌(➕ 새로운 곳) — 승인되면 목록에 추가
+      document.getElementById('r-sub').innerHTML =
+        "큰아들이 승인하면 송금하고,<br><b>" + p.key + "</b>을(를) 목록에 추가해요.";
+      addNotif("🔔", "신규 수취인 승인 요청",
+        "어머니가 " + p.name + "께 " + amtTxt + " 송금을 시도했어요. 승인할까요?");
+      if (!getPerson(p.key)) {
+        people.push({ key:p.key, name:p.name, rel:p.rel, bank:p.bank, accountNo:p.accountNo,
+                      avatar:p.avatar, known:true, alias:[p.key], count:1, lastUsed:Date.now() });
+        savePeople(); renderPeople();
+      }
+    } else {
+      // 등록된 분인데 고액이라 확인받는 경우
+      document.getElementById('r-sub').innerHTML =
+        "큰아들이 확인하면 송금을 이어가요.<br>(" + p.name + " · " + amtTxt + ")";
+      addNotif("🔔", "송금 확인 요청",
+        "어머니가 " + p.name + "께 " + amtTxt + " 송금을 시도했어요. 승인할까요?");
     }
     show('result');
   }
