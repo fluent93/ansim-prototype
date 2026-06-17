@@ -41,8 +41,8 @@
   /* ---------- Phone (어르신 화면) ---------- */
   .phone { background: var(--card); border-radius: 30px; box-shadow: var(--shadow); overflow: hidden; border: 1px solid var(--line); }
   .phone .head { background: linear-gradient(135deg, #2f6df0, #6aa3ff); color: #fff; padding: 22px 22px 20px; }
-  .phone .head .hi { font-size: 23px; font-weight: 800; }
-  .phone .head .sub { font-size: 15px; opacity: .92; margin-top: 5px; }
+  .phone .head .hi { font-size: 25px; font-weight: 800; }
+  .phone .head .sub { font-size: 16px; opacity: .95; margin-top: 5px; }
   .screen { padding: 22px; min-height: 430px; display: flex; flex-direction: column; }
 
   /* mic */
@@ -56,19 +56,19 @@
   .mic:active { transform: scale(.96); }
   .mic.listening { animation: pulse 1.2s infinite; }
   @keyframes pulse { 0%{ box-shadow:0 0 0 0 rgba(47,109,240,.5);} 100%{ box-shadow:0 0 0 26px rgba(47,109,240,0);} }
-  .mic-label { font-size: 19px; font-weight: 800; }
-  .mic-hint { font-size: 14px; color: var(--muted); text-align: center; line-height: 1.5; }
+  .mic-label { font-size: 21px; font-weight: 800; }
+  .mic-hint { font-size: 16px; color: var(--muted); text-align: center; line-height: 1.55; }
 
-  .transcript { background: var(--bg); border-radius: 16px; padding: 16px; margin-top: 14px; font-size: 19px; font-weight: 700; text-align: center; min-height: 60px; display: flex; align-items: center; justify-content: center; }
-  .transcript.empty { color: #aab1bd; font-weight: 600; font-size: 16px; }
+  .transcript { background: var(--bg); border-radius: 16px; padding: 18px; margin-top: 14px; font-size: 23px; font-weight: 700; text-align: center; min-height: 64px; display: flex; align-items: center; justify-content: center; }
+  .transcript.empty { color: #9aa1ad; font-weight: 600; font-size: 17px; }
 
   .quick { margin-top: 18px; }
-  .quick .label { font-size: 14px; color: var(--muted); margin-bottom: 9px; font-weight: 700; }
+  .quick .label { font-size: 16px; color: var(--muted); margin-bottom: 9px; font-weight: 700; }
   .people { display: flex; gap: 12px; flex-wrap: wrap; }
   .person { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
-  .avatar { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; background: var(--brand-soft); border: 2px solid transparent; }
+  .avatar { width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center; font-size: 29px; background: var(--brand-soft); border: 2px solid transparent; }
   .person:hover .avatar { border-color: var(--brand); }
-  .person .nm { font-size: 13px; font-weight: 700; }
+  .person .nm { font-size: 15px; font-weight: 700; }
 
   /* confirm card (큰 글씨 확인) */
   .confirm { display: none; flex-direction: column; gap: 16px; }
@@ -76,27 +76,27 @@
   @keyframes fade { from{opacity:0; transform:translateY(8px);} to{opacity:1;} }
   .confirm .who-big { display: flex; align-items: center; gap: 14px; background: var(--bg); border-radius: 18px; padding: 16px; }
   .confirm .who-big .avatar { width: 64px; height: 64px; font-size: 30px; }
-  .confirm .who-big .nm { font-size: 22px; font-weight: 800; }
-  .confirm .who-big .rel { font-size: 14px; color: var(--muted); }
-  .amount-line { text-align: center; font-size: 19px; line-height: 1.6; }
-  .amount-line b { font-size: 34px; color: var(--brand-d); }
-  .flag { display: flex; gap: 10px; align-items: flex-start; padding: 14px; border-radius: 14px; font-size: 14.5px; line-height: 1.5; }
+  .confirm .who-big .nm { font-size: 25px; font-weight: 800; }
+  .confirm .who-big .rel { font-size: 15px; color: var(--muted); }
+  .amount-line { text-align: center; font-size: 22px; line-height: 1.6; }
+  .amount-line b { font-size: 42px; color: var(--brand-d); }
+  .flag { display: flex; gap: 10px; align-items: flex-start; padding: 15px; border-radius: 14px; font-size: 16.5px; line-height: 1.5; }
   .flag.warn { background: var(--warn-soft); color: #8a5300; }
   .flag.danger { background: var(--danger-soft); color: #a51d1d; }
   .flag.safe { background: var(--safe-soft); color: #0d6b40; }
   .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .btn { border: 0; border-radius: 16px; padding: 20px; font-size: 20px; font-weight: 800; cursor: pointer; transition: transform .06s; }
+  .btn { border: 0; border-radius: 16px; padding: 22px; font-size: 22px; font-weight: 800; cursor: pointer; transition: transform .06s; }
   .btn:active { transform: scale(.97); }
   .btn.go { background: var(--safe); color: #fff; }
-  .btn.cancel { background: #eceff4; color: #444; }
-  .btn.ask { grid-column: 1 / -1; background: var(--warn-soft); color: #8a5300; font-size: 17px; padding: 15px; }
+  .btn.cancel { background: #e6e9ef; color: #333; }
+  .btn.ask { grid-column: 1 / -1; background: var(--warn-soft); color: #7a4a00; font-size: 19px; padding: 17px; }
 
   /* result */
   .result { display: none; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding-top: 20px; }
   .result.show { display: flex; animation: fade .2s; }
   .result .big-ic { width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center; font-size: 50px; background: var(--safe-soft); }
-  .result .msg { font-size: 24px; font-weight: 800; }
-  .result .sub { font-size: 16px; color: var(--muted); line-height: 1.5; }
+  .result .msg { font-size: 26px; font-weight: 800; }
+  .result .sub { font-size: 17.5px; color: var(--muted); line-height: 1.55; }
   .btn.again { background: var(--brand); color: #fff; margin-top: 8px; padding: 16px 30px; }
   .btn.save { background: var(--safe-soft); color: var(--safe); margin-top: 6px; padding: 14px; font-size: 16px; width: 100%; }
   .btn-listen { align-self: center; background: none; border: 0; color: var(--brand); font-size: 15px; font-weight: 700; cursor: pointer; text-decoration: underline; padding: 4px; }
@@ -147,7 +147,7 @@
 
   /* 음성 안 될 때 입력 폴백 */
   .fallback { display: flex; gap: 8px; margin-top: 12px; }
-  .fallback input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 12px; font-size: 15px; font-family: inherit; }
+  .fallback input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 13px; font-size: 16px; font-family: inherit; }
   .fallback .btn { padding: 12px 16px; font-size: 15px; }
 
   /* 자주 보내는 사람: 자동 정렬 + 신규 추가 */
