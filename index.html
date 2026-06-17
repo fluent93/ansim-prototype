@@ -275,6 +275,19 @@
           <div class="dl-hint">휴대폰에서 <b>QR을 스캔</b>하거나 <b>토스 열기</b>를 누르면<br>토스 송금화면이 떠요. (PC에서는 안 열려요)</div>
         </div>
         <button id="save-new" class="btn save" style="display:none" onclick="saveSpokenRecipient()">✅ 토스에서 보냈어요 — 목록에 저장</button>
+        <button id="save-ask" class="btn save" style="display:none" onclick="openSaveForm()">💾 이 받는 분 저장 (계좌 입력)</button>
+        <div id="save-form" class="newform">
+          <div class="nf-title" id="sf-title">받는 분 저장</div>
+          <input id="sf-name" placeholder="이름 (예: 류창한)" />
+          <div class="nf-row">
+            <input id="sf-bank" placeholder="은행 (예: 신한)" />
+            <input id="sf-acc" placeholder="계좌번호 (숫자)" inputmode="numeric" />
+          </div>
+          <div class="nf-btns">
+            <button class="btn cancel" onclick="closeSaveForm()">취소</button>
+            <button class="btn go" onclick="submitSave()">저장</button>
+          </div>
+        </div>
         <button class="btn again" onclick="reset()">처음으로</button>
       </div>
     </div>
@@ -644,7 +657,9 @@
       qr.innerHTML = "<div style='font-size:12px;color:#888;padding:24px;text-align:center'>QR 생성에 인터넷이 필요해요.<br>아래 링크를 복사해 휴대폰에서 여세요.</div>";
     }
     document.getElementById('dl-panel').style.display = "flex";
-    document.getElementById('save-new').style.display = canSave ? "block" : "none";  // 보낸 뒤 저장(계좌 있을 때만)
+    document.getElementById('save-new').style.display = canSave ? "block" : "none";          // 계좌 아는 신규 → 바로 저장
+    document.getElementById('save-ask').style.display = (isNew && !p.accountNo) ? "block" : "none"; // 계좌 모르는 신규 → 입력해서 저장
+    document.getElementById('save-form').classList.remove('show');
 
     // 클립보드 백업: 딥링크가 막혀도 토스가 클립보드를 읽어 송금을 제안함
     copyText(dl);
@@ -669,6 +684,31 @@
       addNotif("✅", "수취인 저장됨", p.name + " (" + p.bank + " ***" + p.accountNo.slice(-4) + ")을(를) 목록에 추가했어요.");
     }
     document.getElementById('save-new').style.display = "none";
+    showToast("저장했어요. 다음엔 이름만 말하면 돼요");
+  }
+  // 계좌 없이 보낸 뒤 → 계좌를 입력해 목록에 저장 (사후 등록)
+  function openSaveForm() {
+    const p = pending && pending.p; if (!p) return;
+    document.getElementById('sf-title').textContent = "받는 분 저장";
+    document.getElementById('sf-name').value = (p.name && p.name !== "받는 분") ? p.name : "";
+    document.getElementById('sf-bank').value = p.bank || "";
+    document.getElementById('sf-acc').value = "";
+    document.getElementById('save-form').classList.add('show');
+  }
+  function closeSaveForm() { document.getElementById('save-form').classList.remove('show'); }
+  function submitSave() {
+    const name = document.getElementById('sf-name').value.trim();
+    const bank = document.getElementById('sf-bank').value.trim();
+    const acc  = document.getElementById('sf-acc').value.replace(/[^0-9]/g, "");
+    if (!name || !bank || acc.length < 8) { showToast("이름·은행·계좌번호(8자리 이상)를 입력하세요"); return; }
+    if (!getPerson(name)) {
+      people.push({ key:name, name:name, rel:bank + " ***" + acc.slice(-4),
+                    bank:bank, accountNo:acc, avatar:"👤", known:true, alias:[name], count:1, lastUsed:Date.now() });
+      savePeople(); renderPeople();
+      addNotif("✅", "수취인 저장됨", name + " (" + bank + " ***" + acc.slice(-4) + ")을(를) 목록에 추가했어요.");
+    }
+    closeSaveForm();
+    document.getElementById('save-ask').style.display = "none";
     showToast("저장했어요. 다음엔 이름만 말하면 돼요");
   }
   function openToss() {
@@ -725,6 +765,8 @@
     setTranscript(""); show('listen'); pending = null; pendingAmt = null; lastDeepLink = "";
     document.getElementById('dl-panel').style.display = "none";
     document.getElementById('save-new').style.display = "none";
+    document.getElementById('save-ask').style.display = "none";
+    document.getElementById('save-form').classList.remove('show');
   }
 
   function showToast(msg) {
