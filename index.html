@@ -99,6 +99,7 @@
   .result .sub { font-size: 16px; color: var(--muted); line-height: 1.5; }
   .btn.again { background: var(--brand); color: #fff; margin-top: 8px; padding: 16px 30px; }
   .btn.save { background: var(--safe-soft); color: var(--safe); margin-top: 6px; padding: 14px; font-size: 16px; width: 100%; }
+  .btn-listen { align-self: center; background: none; border: 0; color: var(--brand); font-size: 15px; font-weight: 700; cursor: pointer; text-decoration: underline; padding: 4px; }
 
   /* 토스 핸드오프 패널 */
   .dl-panel { width: 100%; background: var(--bg); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
@@ -209,6 +210,7 @@
         </div>
         <div class="amount-line">이 분께<br><b id="c-amount">50,000원</b><br>보낼까요?</div>
         <div id="c-flag" class="flag safe"></div>
+        <button class="btn-listen" onclick="replaySpeak()">🔊 다시 듣기</button>
         <div class="btns">
           <button class="btn cancel" onclick="reset()">아니요</button>
           <button class="btn go" id="c-go" onclick="doSend()">네, 보내요</button>
@@ -532,6 +534,21 @@
       flag.className = "flag safe";
       flag.innerHTML = "✅ 자주 보내던 분이에요. 안심하고 보내셔도 돼요.";
     }
+
+    // 음성 안내: 확인 내용을 소리로 읽어줌 (글자가 안 보이는 어르신용)
+    const amtSay = amount ? amount.toLocaleString() + "원" : "";
+    let say;
+    if (!p.known) {
+      say = amount
+        ? p.name + "님께 " + amtSay + " 보낼까요? 처음 보내는 곳이에요. 토스에서 받는 분 성함을 꼭 확인하세요."
+        : p.name + "님께 보낼까요? 금액은 토스에서 넣으셔도 돼요. 처음 보내는 곳이에요.";
+    } else if (amount >= HIGH_AMOUNT) {
+      say = p.name + "님께 " + amtSay + " 보낼까요? 큰 금액이라 아들에게 확인받는 게 좋아요.";
+    } else {
+      say = p.name + "님께 " + amtSay + " 보낼까요?";
+    }
+    speak(say);
+
     show('confirm');
   }
 
@@ -577,6 +594,7 @@
     } else {
       addNotif("💸", "송금 진행", p.name + " · " + amtTxt + " (토스로 핸드오프)");
     }
+    speak("토스로 보낼게요." + (isNew ? " 토스에서 받는 분 성함을 꼭 확인하세요." : ""));
     show('result');
   }
   // 토스에서 보내고 돌아오면 → 우리 앱 목록에 저장(다음부턴 이름만 말하면 됨)
@@ -610,6 +628,7 @@
     document.getElementById('r-sub').innerHTML =
       "아들이 확인하고 알려드릴 거예요.<br>(" + p.name + " · " + amtTxt + ")";
     addNotif("🔔", "확인 요청", "어머니가 " + p.name + "께 " + amtTxt + " 보내려 해요. 확인해 주세요.");
+    speak("아들에게 물어봤어요. 확인하면 알려드릴게요.");
     show('result');
   }
 
@@ -640,6 +659,7 @@
     document.getElementById('step-result').classList.toggle('show', step === 'result');
   }
   function reset() {
+    stopSpeak();
     setTranscript(""); show('listen'); pending = null; lastDeepLink = "";
     document.getElementById('dl-panel').style.display = "none";
     document.getElementById('save-new').style.display = "none";
@@ -650,6 +670,21 @@
     el.textContent = msg; el.classList.add('show');
     setTimeout(() => el.classList.remove('show'), 2800);
   }
+
+  /* ---------- 음성 안내 (TTS) ---------- */
+  let lastSpoken = "";
+  function speak(text) {
+    lastSpoken = text;
+    if (!('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.cancel();           // 이전 안내 중단
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "ko-KR"; u.rate = 0.95;            // 또박또박, 조금 천천히
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+  function replaySpeak() { if (lastSpoken) speak(lastSpoken); }
+  function stopSpeak() { try { window.speechSynthesis.cancel(); } catch (e) {} }
 
   /* ---------- 초기 렌더 ---------- */
   renderPeople();
