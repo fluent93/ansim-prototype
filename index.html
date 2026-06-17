@@ -129,6 +129,21 @@
 
   .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(80px); background: #16202e; color: #fff; padding: 14px 22px; border-radius: 14px; font-weight: 700; box-shadow: var(--shadow); opacity: 0; transition: .3s; z-index: 60; }
   .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  /* 자주 보내는 사람: 자동 정렬 + 신규 추가 */
+  .quick .auto-tag { font-size: 11.5px; color: var(--brand); font-weight: 600; }
+  .person .cnt { font-size: 11px; color: var(--muted); }
+  .avatar.add { background: #eef1f6; color: var(--brand); border: 2px dashed #c3cdde; }
+  .reset-link { margin-top: 12px; background: none; border: 0; color: #aab1bd; font-size: 12px; cursor: pointer; text-decoration: underline; }
+  .newform { display: none; flex-direction: column; gap: 8px; margin-top: 14px; padding: 14px; background: var(--bg); border-radius: 14px; }
+  .newform.show { display: flex; animation: fade .2s; }
+  .newform .nf-title { font-weight: 800; font-size: 15px; }
+  .newform .nf-note { font-size: 12px; color: var(--muted); line-height: 1.4; margin-top: -2px; }
+  .newform input { border: 1px solid var(--line); border-radius: 10px; padding: 11px; font-size: 15px; font-family: inherit; }
+  .newform .nf-row { display: flex; gap: 8px; }
+  .newform .nf-row input { flex: 1; min-width: 0; }
+  .newform .nf-btns { display: flex; gap: 8px; }
+  .newform .nf-btns .btn { flex: 1; padding: 12px; font-size: 15px; }
 </style>
 </head>
 <body>
@@ -154,12 +169,24 @@
         </div>
         <div id="transcript" class="transcript empty">여기에 말씀하신 내용이 보여요</div>
         <div class="quick">
-          <div class="label">자주 보내는 사람</div>
-          <div class="people">
-            <div class="person" onclick="quickPick('큰아들')"><div class="avatar">👨</div><div class="nm">큰아들</div></div>
-            <div class="person" onclick="quickPick('둘째딸')"><div class="avatar">👩</div><div class="nm">둘째딸</div></div>
-            <div class="person" onclick="quickPick('손녀')"><div class="avatar">👧</div><div class="nm">손녀</div></div>
-            <div class="person" onclick="quickPick('관리비')"><div class="avatar">🏢</div><div class="nm">관리비</div></div>
+          <div class="label">자주 보내는 사람 <span class="auto-tag">· 보낼수록 자동 정렬</span></div>
+          <div id="people" class="people"></div>
+          <button class="reset-link" onclick="resetPeople()">목록 초기화(데모)</button>
+        </div>
+
+        <!-- 신규 수취인 입력 (데모용. 실서비스에선 자녀가 등록) -->
+        <div id="newform" class="newform">
+          <div class="nf-title">처음 보내는 곳</div>
+          <div class="nf-note">실제 서비스에선 어머니가 직접 입력하지 않고 <b>자녀가 등록</b>해요(오타·사기 방지).</div>
+          <input id="nf-name" placeholder="이름 (예: ○○병원, 김복자)" />
+          <div class="nf-row">
+            <input id="nf-bank" placeholder="은행 (예: 국민)" />
+            <input id="nf-acc" placeholder="계좌번호 (숫자)" inputmode="numeric" />
+          </div>
+          <input id="nf-amt" placeholder="금액 (예: 50000)" inputmode="numeric" />
+          <div class="nf-btns">
+            <button class="btn cancel" onclick="closeNewForm()">취소</button>
+            <button class="btn go" onclick="submitNew()">보내기</button>
           </div>
         </div>
       </div>
@@ -225,18 +252,51 @@
 <div id="toast" class="toast"></div>
 
 <script>
-  /* ---------- 등록된 수취인 (예시 데이터) ---------- */
-  /* bank/accountNo는 supertoss://send 딥링크에 들어갑니다.
-     아래는 예시 데이터이며, 실제로는 어머니의 진짜 수취인으로 교체하세요. */
-  const PEOPLE = {
-    "큰아들":   { name: "큰아들 김철수", rel: "국민은행 ***4567",   bank: "국민",     accountNo: "12345601234567", avatar: "👨", known: true, alias: ["큰아들","철수","첫째"] },
-    "둘째딸":   { name: "둘째딸 김영희", rel: "신한은행 ***6789",   bank: "신한",     accountNo: "110123456789",   avatar: "👩", known: true, alias: ["둘째","둘째딸","영희"] },
-    "손녀":     { name: "손녀 김지윤",   rel: "카카오뱅크 ***5678", bank: "카카오뱅크", accountNo: "3333012345678",  avatar: "👧", known: true, alias: ["손녀","지윤"] },
-    "관리비":   { name: "행복아파트 관리비", rel: "우리은행 ***8901", bank: "우리",     accountNo: "1002345678901",  avatar: "🏢", known: true, alias: ["관리비","아파트"] },
-  };
+  /* ---------- 등록된 수취인 ----------
+     count(보낸 횟수)·lastUsed(최근 시각)로 자동 정렬되고, localStorage에 저장됩니다.
+     bank/accountNo는 supertoss://send 딥링크에 들어갑니다(예시 데이터). */
+  const DEFAULT_PEOPLE = [
+    { key:"큰아들", name:"큰아들 김철수",     rel:"국민은행 ***4567",   bank:"국민",     accountNo:"12345601234567", avatar:"👨", known:true, alias:["큰아들","철수","첫째"], count:3, lastUsed:103 },
+    { key:"둘째딸", name:"둘째딸 김영희",     rel:"신한은행 ***6789",   bank:"신한",     accountNo:"110123456789",   avatar:"👩", known:true, alias:["둘째","둘째딸","영희"], count:2, lastUsed:102 },
+    { key:"관리비", name:"행복아파트 관리비", rel:"우리은행 ***8901",   bank:"우리",     accountNo:"1002345678901",  avatar:"🏢", known:true, alias:["관리비","아파트"], count:2, lastUsed:101 },
+    { key:"손녀",   name:"손녀 김지윤",       rel:"카카오뱅크 ***5678", bank:"카카오뱅크", accountNo:"3333012345678", avatar:"👧", known:true, alias:["손녀","지윤"], count:1, lastUsed:100 },
+  ];
   const HIGH_AMOUNT = 300000; // 고액 기준: 30만원 이상이면 자녀 확인 권유
 
+  let people = loadPeople();
   let listening = false, recog = null, pending = null, lastDeepLink = "";
+
+  function loadPeople() {
+    try { const s = localStorage.getItem('ansim_people'); if (s) return JSON.parse(s); } catch (e) {}
+    return JSON.parse(JSON.stringify(DEFAULT_PEOPLE));
+  }
+  function savePeople() { try { localStorage.setItem('ansim_people', JSON.stringify(people)); } catch (e) {} }
+  function getPerson(key) { return people.find(p => p.key === key); }
+  function sortedPeople() { return [...people].sort((a, b) => (b.count - a.count) || (b.lastUsed - a.lastUsed)); }
+  function recordUsage(key) {
+    const rec = getPerson(key);
+    if (rec) { rec.count = (rec.count || 0) + 1; rec.lastUsed = Date.now(); savePeople(); renderPeople(); }
+  }
+  function renderPeople() {
+    const box = document.getElementById('people');
+    box.innerHTML = "";
+    sortedPeople().forEach(p => {
+      const div = document.createElement('div');
+      div.className = "person";
+      div.onclick = () => quickPick(p.key);
+      div.innerHTML = "<div class='avatar'>" + p.avatar + "</div><div class='nm'>" + p.key + "</div>" +
+                      (p.count > 0 ? "<div class='cnt'>" + p.count + "회</div>" : "");
+      box.appendChild(div);
+    });
+    const add = document.createElement('div');
+    add.className = "person"; add.onclick = openNewForm;
+    add.innerHTML = "<div class='avatar add'>➕</div><div class='nm'>새로운 곳</div>";
+    box.appendChild(add);
+  }
+  function resetPeople() {
+    people = JSON.parse(JSON.stringify(DEFAULT_PEOPLE));
+    savePeople(); renderPeople(); showToast("목록을 초기화했어요");
+  }
 
   /* ---------- 음성 인식 (가능하면 실제, 아니면 안내) ---------- */
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -284,6 +344,21 @@
     buildConfirm(key, 50000, "(금액은 말씀하시거나 숫자로 입력)");
   }
 
+  /* ---------- 신규 수취인(처음 보내는 곳) ---------- */
+  function openNewForm() { document.getElementById('newform').classList.add('show'); }
+  function closeNewForm() { document.getElementById('newform').classList.remove('show'); clearNewForm(); }
+  function clearNewForm() { ['nf-name','nf-bank','nf-acc','nf-amt'].forEach(id => document.getElementById(id).value = ""); }
+  function submitNew() {
+    const name = document.getElementById('nf-name').value.trim();
+    const bank = document.getElementById('nf-bank').value.trim();
+    const acc  = document.getElementById('nf-acc').value.replace(/[^0-9]/g, "");
+    const amt  = parseInt(document.getElementById('nf-amt').value.replace(/[^0-9]/g, ""), 10);
+    if (!name || !bank || !acc || !amt) { showToast("이름·은행·계좌·금액을 모두 입력하세요"); return; }
+    closeNewForm();
+    const p = { key:name, name:name, rel:bank + " ***" + acc.slice(-4), bank:bank, accountNo:acc, avatar:"🆕", known:false, alias:[name] };
+    buildConfirmFor(p, amt, null, true);
+  }
+
   /* ---------- 명령 해석 (데모: 규칙 기반) ----------
      실서비스: 이 함수가 Claude API 호출로 대체됨 (README 참고).
      "둘째딸한테 오만원 보내줘" -> { person, amount } */
@@ -302,8 +377,8 @@
     return total || null;
   }
   function findPerson(text) {
-    for (const key in PEOPLE) {
-      if (PEOPLE[key].alias.some(a => text.includes(a))) return key;
+    for (const p of people) {
+      if (p.alias.some(a => text.includes(a))) return p.key;
     }
     return null;
   }
@@ -316,9 +391,9 @@
   }
 
   /* ---------- 확인 화면 만들기 + 안전 가드 ---------- */
-  function buildConfirm(key, amount, note) {
-    const p = PEOPLE[key];
-    pending = { key, p, amount };
+  function buildConfirm(key, amount, note) { buildConfirmFor(getPerson(key), amount, note, false); }
+  function buildConfirmFor(p, amount, note, isNew) {
+    pending = { p, amount, isNew: !!isNew };
     document.getElementById('c-avatar').textContent = p.avatar;
     document.getElementById('c-name').textContent = p.name;
     document.getElementById('c-rel').textContent = p.rel;
@@ -370,6 +445,7 @@
 
     // 클립보드 백업: 딥링크가 막혀도 토스가 클립보드를 읽어 송금을 제안함
     copyText(dl);
+    recordUsage(p.key); // 보낸 횟수↑·최근시각 갱신 → 목록 자동 재정렬
     addNotif("💸", "송금 진행", p.name + " · " + amount.toLocaleString() + "원 (토스로 핸드오프)");
     show('result');
   }
@@ -381,13 +457,23 @@
   function copyLink() { copyText(lastDeepLink); showToast("복사됐어요. 휴대폰 토스에 붙여넣으세요"); }
 
   function askChild() {
-    const { p, amount } = pending;
+    const { p, amount, isNew } = pending;
     document.getElementById('dl-panel').style.display = "none";
     document.getElementById('r-ic').textContent = "🙋";
     document.getElementById('r-ic').style.background = "var(--warn-soft)";
     document.getElementById('r-msg').textContent = "자녀에게 보냈어요";
-    document.getElementById('r-sub').innerHTML = "큰아들이 확인하면 송금을 이어가요.<br>(" + p.name + " · " + amount.toLocaleString() + "원)";
-    addNotif("🔔", "송금 확인 요청", "어머니가 " + p.name + "께 " + amount.toLocaleString() + "원 송금을 시도했어요. 승인할까요?");
+    document.getElementById('r-sub').innerHTML = isNew
+      ? "큰아들이 승인하면 송금하고,<br><b>" + p.key + "</b>을(를) 목록에 추가해요."
+      : "큰아들이 확인하면 송금을 이어가요.<br>(" + p.name + " · " + amount.toLocaleString() + "원)";
+    addNotif("🔔", isNew ? "신규 수취인 승인 요청" : "송금 확인 요청",
+      "어머니가 " + p.name + "께 " + amount.toLocaleString() + "원 송금을 시도했어요. 승인할까요?");
+
+    // 데모: 승인된 것으로 보고 신규 수취인을 목록에 추가 (③ 신규는 승인 후 추가)
+    if (isNew && !getPerson(p.key)) {
+      people.push({ key:p.key, name:p.name, rel:p.rel, bank:p.bank, accountNo:p.accountNo,
+                    avatar:p.avatar, known:true, alias:[p.key], count:1, lastUsed:Date.now() });
+      savePeople(); renderPeople();
+    }
     show('result');
   }
 
@@ -427,6 +513,9 @@
     el.textContent = msg; el.classList.add('show');
     setTimeout(() => el.classList.remove('show'), 2800);
   }
+
+  /* ---------- 초기 렌더 ---------- */
+  renderPeople();
 </script>
 </body>
 </html>
