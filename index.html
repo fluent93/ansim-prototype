@@ -98,6 +98,7 @@
   .result .msg { font-size: 24px; font-weight: 800; }
   .result .sub { font-size: 16px; color: var(--muted); line-height: 1.5; }
   .btn.again { background: var(--brand); color: #fff; margin-top: 8px; padding: 16px 30px; }
+  .btn.save { background: var(--safe-soft); color: var(--safe); margin-top: 6px; padding: 14px; font-size: 16px; width: 100%; }
 
   /* 토스 핸드오프 패널 */
   .dl-panel { width: 100%; background: var(--bg); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
@@ -229,6 +230,7 @@
           </div>
           <div class="dl-hint">휴대폰에서 <b>QR을 스캔</b>하거나 <b>토스 열기</b>를 누르면<br>토스 송금화면이 떠요. (PC에서는 안 열려요)</div>
         </div>
+        <button id="save-new" class="btn save" style="display:none" onclick="saveSpokenRecipient()">✅ 토스에서 보냈어요 — 목록에 저장</button>
         <button class="btn again" onclick="reset()">처음으로</button>
       </div>
     </div>
@@ -421,6 +423,35 @@
     return null;
   }
 
+  // 은행명 인식 (구어 별칭 포함)
+  const BANK_ALIAS = {
+    국민:"국민", kb:"국민", 신한:"신한", 우리:"우리", 하나:"하나", 농협:"농협", nh:"농협",
+    기업:"기업", ibk:"기업", 카카오뱅크:"카카오뱅크", 카카오:"카카오뱅크", 토스뱅크:"토스뱅크",
+    케이뱅크:"케이뱅크", 새마을:"새마을금고", 우체국:"우체국", 수협:"수협", 부산:"부산",
+    대구:"대구", 광주:"광주", 경남:"경남", 전북:"전북", 제주:"제주", 씨티:"씨티", 신협:"신협", 산업:"산업"
+  };
+  function parseBank(text) {
+    const t = text.replace(/\s/g, "").toLowerCase();
+    let best = null, bestLen = 0;
+    for (const k in BANK_ALIAS) {
+      if (t.includes(k.toLowerCase()) && k.length > bestLen) { best = BANK_ALIAS[k]; bestLen = k.length; }
+    }
+    return best;
+  }
+  // 계좌번호(8자리 이상 숫자열) + 은행 추출. 금액과 헷갈리지 않게 8자리↑만 계좌로 봄.
+  function parseAccount(text) {
+    const m = text.match(/\d[\d-]{6,}\d/);
+    if (!m) return null;
+    const digits = m[0].replace(/\D/g, "");
+    if (digits.length < 8) return null;
+    return { bank: parseBank(text) || "은행", accountNo: digits, raw: m[0] };
+  }
+  // 은행명 바로 앞의 한글 토큰을 받는 사람 이름 후보로
+  function nameBeforeBank(text) {
+    const m = text.match(/([가-힣]{2,12})\s*(국민|신한|우리|하나|농협|기업|카카오|토스뱅크|케이뱅크|새마을|우체국|수협|부산|대구|광주|경남|전북|제주|씨티|신협|산업)/);
+    return m ? m[1] : null;
+  }
+
   // 조사·공백 제거 후 별명 부분일치로 수취인 찾기
   function findPerson(text) {
     const t = text.replace(/\s/g, "");
@@ -439,22 +470,38 @@
     return m ? m[1].trim() : null;
   }
   function handleCommand(text) {
-    const amount = parseAmount(text);
-    const key = findPerson(text);
-    // 1) 등록된 수취인 → 바로 다음 단계(평소엔 토스, 고액이면 자녀 확인)
+    const acct = parseAccount(text);
+    const textNoAcct = acct ? text.replace(acct.raw, " ") : text;  // 계좌 숫자를 빼고 금액 파싱
+    const amount = parseAmount(textNoAcct);
+    const key = findPerson(textNoAcct);
+
+    // 1) 이미 등록된 분 → 바로 다음 단계(평소엔 토스, 고액이면 자녀 확인)
     if (key) {
       buildConfirm(key, amount || 50000, amount ? null : "(금액을 다시 말씀해 주세요)");
       if (!amount) showToast("금액을 못 들었어요");
       return;
     }
-    // 2) 등록 안 된 수취인 → 막지 않고, 모르는 분이라 보호자(아들)에게 알려 상의
-    const name = extractRecipientName(text);
+
+    const name = extractRecipientName(textNoAcct) || nameBeforeBank(text);
+
+    // 2) 계좌를 직접 말함 → 막지 않고 토스로! (토스가 성함·계좌 검증, 보낸 뒤 앱에 저장)
+    if (acct) {
+      const disp = name || (acct.bank + " ***" + acct.accountNo.slice(-4));
+      const p = { key:(name || disp), name:disp, rel:acct.bank + " " + acct.accountNo,
+                  bank:acct.bank, accountNo:acct.accountNo, avatar:"🆕", known:false, alias:[name || disp] };
+      buildConfirmFor(p, amount || 0, amount ? null : "(토스에서 금액 입력)", true);
+      if (!amount) showToast("금액을 못 들었어요 — 토스에서 입력하셔도 돼요");
+      return;
+    }
+
+    // 3) 이름만 있고 계좌를 모름 → 막지 않되, 보호자(아들)에게 알려 확인
     if (name) {
       const p = { key:name, name:name, rel:"등록되지 않은 받는 분", bank:"", accountNo:"", avatar:"❓", known:false, alias:[name] };
       buildConfirmFor(p, amount || 0, null, true);
       return;
     }
-    // 3) 이름조차 못 알아들음
+
+    // 4) 이름조차 못 알아들음
     showToast("누구에게 보낼지 못 알아들었어요. 다시 말씀해 주세요");
   }
 
@@ -473,11 +520,17 @@
     askBtn.style.display = "none"; goBtn.style.display = "block";
 
     if (!p.known) {
-      flag.className = "flag danger";
-      flag.innerHTML = p.accountNo
-        ? "⛔ <b>처음 보내는 계좌예요.</b> 사기일 수 있으니 큰아들에게 먼저 확인받을게요."
-        : "⚠️ <b>'" + p.name + "'님은 등록되어 있지 않아요.</b> 안전을 위해 큰아들에게 알려 확인할게요.";
-      askBtn.style.display = "block"; goBtn.style.display = "none";
+      if (p.accountNo) {
+        // 계좌를 아는 처음 보내는 곳 → 막지 않고 토스로. 토스가 성함을 보여주니 거기서 확인 + 아들 알림
+        flag.className = "flag warn";
+        flag.innerHTML = "⚠️ <b>처음 보내는 곳이에요.</b> 토스 화면에서 <b>받는 분 성함</b>을 꼭 확인하세요. 큰아들에게도 알릴게요.";
+        goBtn.style.display = "block"; askBtn.style.display = "none";
+      } else {
+        // 계좌조차 모름 → 보호자가 확인
+        flag.className = "flag danger";
+        flag.innerHTML = "⚠️ <b>'" + p.name + "'님은 등록도 안 됐고 계좌도 몰라요.</b> 큰아들에게 알려 확인할게요.";
+        askBtn.style.display = "block"; goBtn.style.display = "none";
+      }
     } else if (amount >= HIGH_AMOUNT) {
       flag.className = "flag warn";
       flag.innerHTML = "⚠️ <b>큰 금액(30만원 이상)이에요.</b> 자녀 확인 후 보내면 더 안전해요.";
@@ -491,17 +544,22 @@
 
   /* 실제 토스 핸드오프: supertoss://send 딥링크 생성 + QR + 클립보드 백업 */
   function buildDeepLink(p, amount) {
-    return "supertoss://send?bank=" + encodeURIComponent(p.bank) +
-           "&accountNo=" + p.accountNo + "&amount=" + amount;
+    let dl = "supertoss://send?bank=" + encodeURIComponent(p.bank) + "&accountNo=" + p.accountNo;
+    if (amount) dl += "&amount=" + amount;  // 금액 못 들었으면 토스에서 입력
+    return dl;
   }
   function doSend() {
     const { p, amount } = pending;
     const dl = buildDeepLink(p, amount);
     lastDeepLink = dl;
+    const amtTxt = amount ? amount.toLocaleString() + "원" : "(토스에서 금액 입력)";
+    const isNewAcct = !p.known && !!p.accountNo;   // 말로 계좌를 부른 처음 보내는 곳
+
     document.getElementById('r-ic').textContent = "📲";
     document.getElementById('r-ic').style.background = "var(--brand-soft)";
     document.getElementById('r-msg').textContent = "토스로 보내기";
-    document.getElementById('r-sub').innerHTML = p.name + "께 <b>" + amount.toLocaleString() + "원</b><br>토스 송금화면을 열어요.";
+    document.getElementById('r-sub').innerHTML = p.name + "께 <b>" + amtTxt + "</b><br>토스 송금화면을 열어요." +
+      (isNewAcct ? "<br><span style='color:var(--warn);font-weight:700'>토스에서 받는 분 성함을 꼭 확인하세요.</span>" : "");
 
     document.getElementById('dl-link').textContent = dl;
     const qr = document.getElementById('qr');
@@ -512,12 +570,30 @@
       qr.innerHTML = "<div style='font-size:12px;color:#888;padding:24px;text-align:center'>QR 생성에 인터넷이 필요해요.<br>아래 링크를 복사해 휴대폰에서 여세요.</div>";
     }
     document.getElementById('dl-panel').style.display = "flex";
+    document.getElementById('save-new').style.display = isNewAcct ? "block" : "none";  // 보낸 뒤 저장 버튼
 
     // 클립보드 백업: 딥링크가 막혀도 토스가 클립보드를 읽어 송금을 제안함
     copyText(dl);
-    recordUsage(p.key); // 보낸 횟수↑·최근시각 갱신 → 목록 자동 재정렬
-    addNotif("💸", "송금 진행", p.name + " · " + amount.toLocaleString() + "원 (토스로 핸드오프)");
+    if (p.known) recordUsage(p.key);  // 등록된 분만 횟수 갱신
+    if (isNewAcct) {
+      addNotif("🔔", "처음 보내는 곳 알림", "어머니가 '" + p.name + "'(" + p.bank + " ***" + p.accountNo.slice(-4) + ", 처음)에게 " + amtTxt + "을 보냈어요. 확인해 주세요.");
+    } else {
+      addNotif("💸", "송금 진행", p.name + " · " + amtTxt + " (토스로 핸드오프)");
+    }
     show('result');
+  }
+  // 토스에서 보내고 돌아오면 → 우리 앱 목록에 저장(다음부턴 이름만 말하면 됨)
+  function saveSpokenRecipient() {
+    const p = pending && pending.p;
+    if (!p || !p.accountNo) return;
+    if (!getPerson(p.key)) {
+      people.push({ key:p.key, name:p.name, rel:p.bank + " ***" + p.accountNo.slice(-4),
+                    bank:p.bank, accountNo:p.accountNo, avatar:"👤", known:true, alias:[p.key], count:1, lastUsed:Date.now() });
+      savePeople(); renderPeople();
+      addNotif("✅", "수취인 저장됨", p.name + " (" + p.bank + " ***" + p.accountNo.slice(-4) + ")을(를) 목록에 추가했어요.");
+    }
+    document.getElementById('save-new').style.display = "none";
+    showToast("저장했어요. 다음엔 이름만 말하면 돼요");
   }
   function openToss() {
     if (!lastDeepLink) return;
@@ -590,6 +666,7 @@
   function reset() {
     setTranscript(""); show('listen'); pending = null; lastDeepLink = "";
     document.getElementById('dl-panel').style.display = "none";
+    document.getElementById('save-new').style.display = "none";
   }
 
   function showToast(msg) {
