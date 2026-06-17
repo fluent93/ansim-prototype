@@ -171,15 +171,15 @@
         <div class="mic-wrap">
           <button id="mic" class="mic" onclick="toggleMic()">🎤</button>
           <div class="mic-label" id="mic-label">눌러서 말하기</div>
-          <div class="mic-hint">예) "둘째한테 오만원 보내줘"<br>"관리비 십이만원 내줘"</div>
+          <div class="mic-hint">예) "신한은행 110123456789로 만원 보내줘"<br>한 번 보내면 다음엔 이름만 말해도 돼요</div>
         </div>
         <div id="transcript" class="transcript empty">여기에 말씀하신 내용이 보여요</div>
         <div class="fallback">
-          <input id="cmd-input" placeholder="음성이 안 되면 입력: 둘째한테 5만원" onkeydown="if(event.key==='Enter')submitText()" />
+          <input id="cmd-input" placeholder="입력 예: 신한은행 110123456789로 1만원" onkeydown="if(event.key==='Enter')submitText()" />
           <button class="btn" onclick="submitText()">보내기</button>
         </div>
         <div class="quick">
-          <div class="label">자주 보내는 사람 <span class="auto-tag">· 보낼수록 자동 정렬</span></div>
+          <div class="label">자주 보내는 사람 <span class="auto-tag">· 보내면 자동으로 추가돼요</span></div>
           <div id="people" class="people"></div>
           <button class="reset-link" onclick="resetPeople()">목록 초기화(데모)</button>
         </div>
@@ -205,14 +205,14 @@
       <div id="step-confirm" class="confirm">
         <div class="who-big">
           <div class="avatar" id="c-avatar">👨</div>
-          <div><div class="nm" id="c-name">큰아들</div><div class="rel" id="c-rel">김철수 · 국민은행 ***1234</div></div>
+          <div><div class="nm" id="c-name">받는 분</div><div class="rel" id="c-rel"></div></div>
         </div>
         <div class="amount-line">이 분께<br><b id="c-amount">50,000원</b><br>보낼까요?</div>
         <div id="c-flag" class="flag safe"></div>
         <div class="btns">
           <button class="btn cancel" onclick="reset()">아니요</button>
           <button class="btn go" id="c-go" onclick="doSend()">네, 보내요</button>
-          <button class="btn ask" id="c-ask" onclick="askChild()" style="display:none">🙋 큰아들에게 먼저 확인받기</button>
+          <button class="btn ask" id="c-ask" onclick="askChild()" style="display:none">🙋 아들에게 먼저 물어보기</button>
         </div>
       </div>
 
@@ -266,22 +266,17 @@
   /* ---------- 등록된 수취인 ----------
      count(보낸 횟수)·lastUsed(최근 시각)로 자동 정렬되고, localStorage에 저장됩니다.
      bank/accountNo는 supertoss://send 딥링크에 들어갑니다(예시 데이터). */
-  const DEFAULT_PEOPLE = [
-    { key:"큰아들", name:"큰아들 김철수",     rel:"국민은행 ***4567",   bank:"국민",     accountNo:"12345601234567", avatar:"👨", known:true, alias:["큰아들","철수","철수야","첫째","큰애","장남"], count:3, lastUsed:103 },
-    { key:"둘째딸", name:"둘째딸 김영희",     rel:"신한은행 ***6789",   bank:"신한",     accountNo:"110123456789",   avatar:"👩", known:true, alias:["둘째딸","둘째","영희","영희야","작은딸"], count:2, lastUsed:102 },
-    { key:"관리비", name:"행복아파트 관리비", rel:"우리은행 ***8901",   bank:"우리",     accountNo:"1002345678901",  avatar:"🏢", known:true, alias:["관리비","아파트","관리사무소","아파트관리비"], count:2, lastUsed:101 },
-    { key:"손녀",   name:"손녀 김지윤",       rel:"카카오뱅크 ***5678", bank:"카카오뱅크", accountNo:"3333012345678", avatar:"👧", known:true, alias:["손녀","손녀딸","지윤","지윤이"], count:1, lastUsed:100 },
-  ];
+  const DEFAULT_PEOPLE = [];   // 더미 제거 — 말로 보낼 때마다 자동으로 쌓입니다
   const HIGH_AMOUNT = 300000; // 고액 기준: 30만원 이상이면 자녀 확인 권유
 
   let people = loadPeople();
   let listening = false, recog = null, pending = null, lastDeepLink = "";
 
   function loadPeople() {
-    try { const s = localStorage.getItem('ansim_people'); if (s) return JSON.parse(s); } catch (e) {}
+    try { const s = localStorage.getItem('ansim_people_v2'); if (s) return JSON.parse(s); } catch (e) {}
     return JSON.parse(JSON.stringify(DEFAULT_PEOPLE));
   }
-  function savePeople() { try { localStorage.setItem('ansim_people', JSON.stringify(people)); } catch (e) {} }
+  function savePeople() { try { localStorage.setItem('ansim_people_v2', JSON.stringify(people)); } catch (e) {} }
   function getPerson(key) { return people.find(p => p.key === key); }
   function sortedPeople() { return [...people].sort((a, b) => (b.count - a.count) || (b.lastUsed - a.lastUsed)); }
   function recordUsage(key) {
@@ -390,7 +385,7 @@
   /* ---------- 명령 해석 (데모: 규칙 기반) ----------
      실서비스에선 이 부분이 LLM 해석으로 확장될 수 있지만, 송금 도메인은
      좁아서 규칙 기반으로 대부분의 표현을 잡습니다. (README 참고)
-     예: "둘째딸한테 오만원 보내줘", "관리비 십이만원 내줘", "손녀 3만5천원" */
+     예: "신한은행 110123456789로 만원 보내줘", "철수에게 3만5천원" */
 
   // 한글 숫자 → 정수 (일~구, 십·백·천·만·억 조합 지원)
   const KO_DIGIT = { 영:0, 공:0, 일:1, 이:2, 삼:3, 사:4, 오:5, 육:6, 륙:6, 칠:7, 팔:8, 구:9 };
@@ -483,25 +478,27 @@
     }
 
     const name = extractRecipientName(textNoAcct) || nameBeforeBank(text);
+    const bank = parseBank(text);
 
-    // 2) 계좌를 직접 말함 → 막지 않고 토스로! (토스가 성함·계좌 검증, 보낸 뒤 앱에 저장)
-    if (acct) {
-      const disp = name || (acct.bank + " ***" + acct.accountNo.slice(-4));
-      const p = { key:(name || disp), name:disp, rel:acct.bank + " " + acct.accountNo,
-                  bank:acct.bank, accountNo:acct.accountNo, avatar:"🆕", known:false, alias:[name || disp] };
+    // 2) 등록 안 된 분이라도 이름/계좌/은행이 있으면 → 막지 않고 토스로 넘김
+    //    (계좌 있으면 자동완성, 없으면 토스 송금화면에서 받는 분 선택) + 아들 알림
+    if (acct || name || bank) {
+      let p;
+      if (acct) {
+        const disp = name || (acct.bank + " ***" + acct.accountNo.slice(-4));
+        p = { key:(name || disp), name:disp, rel:acct.bank + " " + acct.accountNo,
+              bank:acct.bank, accountNo:acct.accountNo, avatar:"🆕", known:false, alias:[name || disp] };
+      } else {
+        const disp = name || (bank ? bank + "은행" : "받는 분");
+        p = { key:disp, name:disp, rel:(bank ? bank + " · 계좌는 토스에서" : "토스에서 받는 분 선택"),
+              bank:bank || "", accountNo:"", avatar:"❓", known:false, alias:[disp] };
+      }
       buildConfirmFor(p, amount || 0, amount ? null : "(토스에서 금액 입력)", true);
       if (!amount) showToast("금액을 못 들었어요 — 토스에서 입력하셔도 돼요");
       return;
     }
 
-    // 3) 이름만 있고 계좌를 모름 → 막지 않되, 보호자(아들)에게 알려 확인
-    if (name) {
-      const p = { key:name, name:name, rel:"등록되지 않은 받는 분", bank:"", accountNo:"", avatar:"❓", known:false, alias:[name] };
-      buildConfirmFor(p, amount || 0, null, true);
-      return;
-    }
-
-    // 4) 이름조차 못 알아들음
+    // 3) 아무것도 못 알아들음
     showToast("누구에게 보낼지 못 알아들었어요. 다시 말씀해 주세요");
   }
 
@@ -520,17 +517,13 @@
     askBtn.style.display = "none"; goBtn.style.display = "block";
 
     if (!p.known) {
-      if (p.accountNo) {
-        // 계좌를 아는 처음 보내는 곳 → 막지 않고 토스로. 토스가 성함을 보여주니 거기서 확인 + 아들 알림
-        flag.className = "flag warn";
-        flag.innerHTML = "⚠️ <b>처음 보내는 곳이에요.</b> 토스 화면에서 <b>받는 분 성함</b>을 꼭 확인하세요. 큰아들에게도 알릴게요.";
-        goBtn.style.display = "block"; askBtn.style.display = "none";
-      } else {
-        // 계좌조차 모름 → 보호자가 확인
-        flag.className = "flag danger";
-        flag.innerHTML = "⚠️ <b>'" + p.name + "'님은 등록도 안 됐고 계좌도 몰라요.</b> 큰아들에게 알려 확인할게요.";
-        askBtn.style.display = "block"; goBtn.style.display = "none";
-      }
+      // 처음 보내는 곳 → 막지 않고 토스로(기본). 헷갈리면 아들에게 물어보기(보조). 아들 알림은 자동.
+      flag.className = "flag warn";
+      flag.innerHTML = p.accountNo
+        ? "⚠️ <b>처음 보내는 곳이에요.</b> 토스 화면에서 <b>받는 분 성함</b>을 꼭 확인하세요. 아들에게도 알릴게요."
+        : "⚠️ <b>처음 보내는 곳이에요.</b> 토스에서 받는 분을 고르고 성함을 확인하세요. 아들에게도 알릴게요.";
+      goBtn.style.display = "block";
+      askBtn.style.display = "block";   // "아들에게 물어보기" 보조 버튼도 함께
     } else if (amount >= HIGH_AMOUNT) {
       flag.className = "flag warn";
       flag.innerHTML = "⚠️ <b>큰 금액(30만원 이상)이에요.</b> 자녀 확인 후 보내면 더 안전해요.";
@@ -544,22 +537,25 @@
 
   /* 실제 토스 핸드오프: supertoss://send 딥링크 생성 + QR + 클립보드 백업 */
   function buildDeepLink(p, amount) {
-    let dl = "supertoss://send?bank=" + encodeURIComponent(p.bank) + "&accountNo=" + p.accountNo;
-    if (amount) dl += "&amount=" + amount;  // 금액 못 들었으면 토스에서 입력
-    return dl;
+    const parts = [];
+    if (p.bank) parts.push("bank=" + encodeURIComponent(p.bank));
+    if (p.accountNo) parts.push("accountNo=" + p.accountNo);  // 없으면 토스 송금화면에서 받는 분 선택
+    if (amount) parts.push("amount=" + amount);               // 없으면 토스에서 금액 입력
+    return "supertoss://send" + (parts.length ? "?" + parts.join("&") : "");
   }
   function doSend() {
     const { p, amount } = pending;
     const dl = buildDeepLink(p, amount);
     lastDeepLink = dl;
     const amtTxt = amount ? amount.toLocaleString() + "원" : "(토스에서 금액 입력)";
-    const isNewAcct = !p.known && !!p.accountNo;   // 말로 계좌를 부른 처음 보내는 곳
+    const isNew = !p.known;                       // 등록 안 된 처음 보내는 곳
+    const canSave = isNew && !!p.accountNo;        // 계좌를 알 때만 저장 가능
 
     document.getElementById('r-ic').textContent = "📲";
     document.getElementById('r-ic').style.background = "var(--brand-soft)";
     document.getElementById('r-msg').textContent = "토스로 보내기";
     document.getElementById('r-sub').innerHTML = p.name + "께 <b>" + amtTxt + "</b><br>토스 송금화면을 열어요." +
-      (isNewAcct ? "<br><span style='color:var(--warn);font-weight:700'>토스에서 받는 분 성함을 꼭 확인하세요.</span>" : "");
+      (isNew ? "<br><span style='color:var(--warn);font-weight:700'>토스에서 받는 분 성함을 꼭 확인하세요.</span>" : "");
 
     document.getElementById('dl-link').textContent = dl;
     const qr = document.getElementById('qr');
@@ -570,13 +566,14 @@
       qr.innerHTML = "<div style='font-size:12px;color:#888;padding:24px;text-align:center'>QR 생성에 인터넷이 필요해요.<br>아래 링크를 복사해 휴대폰에서 여세요.</div>";
     }
     document.getElementById('dl-panel').style.display = "flex";
-    document.getElementById('save-new').style.display = isNewAcct ? "block" : "none";  // 보낸 뒤 저장 버튼
+    document.getElementById('save-new').style.display = canSave ? "block" : "none";  // 보낸 뒤 저장(계좌 있을 때만)
 
     // 클립보드 백업: 딥링크가 막혀도 토스가 클립보드를 읽어 송금을 제안함
     copyText(dl);
     if (p.known) recordUsage(p.key);  // 등록된 분만 횟수 갱신
-    if (isNewAcct) {
-      addNotif("🔔", "처음 보내는 곳 알림", "어머니가 '" + p.name + "'(" + p.bank + " ***" + p.accountNo.slice(-4) + ", 처음)에게 " + amtTxt + "을 보냈어요. 확인해 주세요.");
+    if (isNew) {
+      const acctTxt = p.accountNo ? p.bank + " ***" + p.accountNo.slice(-4) : (p.bank || "계좌 미정");
+      addNotif("🔔", "처음 보내는 곳 알림", "어머니가 '" + p.name + "'(" + acctTxt + ", 처음)에게 " + amtTxt + "을 보냈어요. 확인해 주세요.");
     } else {
       addNotif("💸", "송금 진행", p.name + " · " + amtTxt + " (토스로 핸드오프)");
     }
@@ -603,37 +600,16 @@
   function copyLink() { copyText(lastDeepLink); showToast("복사됐어요. 휴대폰 토스에 붙여넣으세요"); }
 
   function askChild() {
-    const { p, amount, isNew } = pending;
+    const { p, amount } = pending;
     document.getElementById('dl-panel').style.display = "none";
+    document.getElementById('save-new').style.display = "none";
     document.getElementById('r-ic').textContent = "🙋";
     document.getElementById('r-ic').style.background = "var(--warn-soft)";
-    document.getElementById('r-msg').textContent = "큰아들에게 알렸어요";
+    document.getElementById('r-msg').textContent = "아들에게 물어봤어요";
     const amtTxt = amount ? amount.toLocaleString() + "원" : "(금액 미정)";
-
-    if (isNew && !p.accountNo) {
-      // 말로 부른 모르는 분 — 계좌가 없으니 보호자가 확인/등록해야 함 (목록 추가 X)
-      document.getElementById('r-sub').innerHTML =
-        "<b>" + p.name + "</b>님은 등록되어 있지 않아요.<br>큰아들이 받는 분을 확인하면 보낼 수 있어요.";
-      addNotif("🔔", "모르는 받는 분 — 확인 요청",
-        "어머니가 '" + p.name + "'(등록 안 됨)에게 " + amtTxt + "을 보내려 해요. 누군지 확인해 주세요.");
-    } else if (isNew) {
-      // 새로 입력한 계좌(➕ 새로운 곳) — 승인되면 목록에 추가
-      document.getElementById('r-sub').innerHTML =
-        "큰아들이 승인하면 송금하고,<br><b>" + p.key + "</b>을(를) 목록에 추가해요.";
-      addNotif("🔔", "신규 수취인 승인 요청",
-        "어머니가 " + p.name + "께 " + amtTxt + " 송금을 시도했어요. 승인할까요?");
-      if (!getPerson(p.key)) {
-        people.push({ key:p.key, name:p.name, rel:p.rel, bank:p.bank, accountNo:p.accountNo,
-                      avatar:p.avatar, known:true, alias:[p.key], count:1, lastUsed:Date.now() });
-        savePeople(); renderPeople();
-      }
-    } else {
-      // 등록된 분인데 고액이라 확인받는 경우
-      document.getElementById('r-sub').innerHTML =
-        "큰아들이 확인하면 송금을 이어가요.<br>(" + p.name + " · " + amtTxt + ")";
-      addNotif("🔔", "송금 확인 요청",
-        "어머니가 " + p.name + "께 " + amtTxt + " 송금을 시도했어요. 승인할까요?");
-    }
+    document.getElementById('r-sub').innerHTML =
+      "아들이 확인하고 알려드릴 거예요.<br>(" + p.name + " · " + amtTxt + ")";
+    addNotif("🔔", "확인 요청", "어머니가 " + p.name + "께 " + amtTxt + " 보내려 해요. 확인해 주세요.");
     show('result');
   }
 
