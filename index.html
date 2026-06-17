@@ -101,6 +101,19 @@
   .btn.save { background: var(--safe-soft); color: var(--safe); margin-top: 6px; padding: 14px; font-size: 16px; width: 100%; }
   .btn-listen { align-self: center; background: none; border: 0; color: var(--brand); font-size: 15px; font-weight: 700; cursor: pointer; text-decoration: underline; padding: 4px; }
 
+  /* 금액 입력 숫자패드 */
+  .amountpad { display: none; flex-direction: column; gap: 12px; }
+  .amountpad.show { display: flex; animation: fade .2s; }
+  .ap-who { font-size: 19px; font-weight: 800; text-align: center; }
+  .ap-display { font-size: 38px; font-weight: 800; text-align: center; color: var(--brand-d); background: var(--bg); border-radius: 14px; padding: 18px; }
+  .ap-quick { display: flex; gap: 8px; }
+  .ap-quick button { flex: 1; padding: 13px; font-size: 16px; font-weight: 700; border: 1px solid var(--line); background: #fff; border-radius: 12px; cursor: pointer; }
+  .ap-quick button:active { background: var(--brand-soft); }
+  .ap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .ap-grid button { padding: 18px; font-size: 26px; font-weight: 800; border: 1px solid var(--line); background: #fff; border-radius: 14px; cursor: pointer; }
+  .ap-grid button:active { background: var(--brand-soft); }
+  .ap-grid button.minor { font-size: 18px; color: var(--muted); }
+
   /* 토스 핸드오프 패널 */
   .dl-panel { width: 100%; background: var(--bg); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
   .dl-panel .qr { background: #fff; padding: 10px; border-radius: 12px; line-height: 0; }
@@ -199,6 +212,35 @@
             <button class="btn cancel" onclick="closeNewForm()">취소</button>
             <button class="btn go" onclick="submitNew()">보내기</button>
           </div>
+        </div>
+      </div>
+
+      <!-- STEP 1.5: 금액 입력 숫자패드 (금액을 안 말했을 때) -->
+      <div id="step-amount" class="amountpad">
+        <div class="ap-who" id="ap-who">얼마를 보낼까요?</div>
+        <div class="ap-display" id="ap-display">0원</div>
+        <div class="ap-quick">
+          <button onclick="amtQuick(10000)">+1만</button>
+          <button onclick="amtQuick(50000)">+5만</button>
+          <button onclick="amtQuick(100000)">+10만</button>
+        </div>
+        <div class="ap-grid">
+          <button onclick="amtKey('1')">1</button>
+          <button onclick="amtKey('2')">2</button>
+          <button onclick="amtKey('3')">3</button>
+          <button onclick="amtKey('4')">4</button>
+          <button onclick="amtKey('5')">5</button>
+          <button onclick="amtKey('6')">6</button>
+          <button onclick="amtKey('7')">7</button>
+          <button onclick="amtKey('8')">8</button>
+          <button onclick="amtKey('9')">9</button>
+          <button class="minor" onclick="amtClear()">지움</button>
+          <button onclick="amtKey('0')">0</button>
+          <button class="minor" onclick="amtBackspace()">⌫</button>
+        </div>
+        <div class="btns">
+          <button class="btn cancel" onclick="reset()">취소</button>
+          <button class="btn go" onclick="amtConfirm()">확인</button>
         </div>
       </div>
 
@@ -362,11 +404,34 @@
     el.textContent = t; el.classList.toggle('empty', !t || t === "…");
   }
 
-  /* ---------- 빠른 선택 (사람 누르기) ---------- */
+  /* ---------- 빠른 선택 (사람 누르기) → 금액 숫자패드 ---------- */
   function quickPick(key) {
-    setTranscript('"' + key + '한테 보내기"');
-    // 금액은 기본 예시로 5만원, 실제론 다음 단계에서 음성/숫자패드로 입력
-    buildConfirm(key, 50000, "(금액은 말씀하시거나 숫자로 입력)");
+    setTranscript('"' + key + '님께 보내기"');
+    askAmount(getPerson(key), false);
+  }
+
+  /* ---------- 금액 입력 숫자패드 ---------- */
+  let pendingAmt = null;
+  function askAmount(person, isNew) {
+    pendingAmt = { person, isNew, value: "" };
+    document.getElementById('ap-who').textContent = person.name + "님께 얼마를 보낼까요?";
+    renderAmt();
+    speak(person.name + "님께 얼마를 보낼까요? 숫자를 눌러 주세요.");
+    show('amount');
+  }
+  function renderAmt() {
+    const v = pendingAmt ? parseInt(pendingAmt.value || "0", 10) : 0;
+    document.getElementById('ap-display').textContent = v.toLocaleString() + "원";
+  }
+  function amtKey(d) { if (pendingAmt && pendingAmt.value.length < 9) { pendingAmt.value += d; renderAmt(); } }
+  function amtBackspace() { if (pendingAmt) { pendingAmt.value = pendingAmt.value.slice(0, -1); renderAmt(); } }
+  function amtClear() { if (pendingAmt) { pendingAmt.value = ""; renderAmt(); } }
+  function amtQuick(n) { if (pendingAmt) { pendingAmt.value = String(parseInt(pendingAmt.value || "0", 10) + n); renderAmt(); } }
+  function amtConfirm() {
+    if (!pendingAmt) return;
+    const amount = parseInt(pendingAmt.value || "0", 10);
+    if (!amount) { showToast("금액을 입력하세요"); return; }
+    buildConfirmFor(pendingAmt.person, amount, null, pendingAmt.isNew);
   }
 
   /* ---------- 신규 수취인(처음 보내는 곳) ---------- */
@@ -472,36 +537,32 @@
     const amount = parseAmount(textNoAcct);
     const key = findPerson(textNoAcct);
 
-    // 1) 이미 등록된 분 → 바로 다음 단계(평소엔 토스, 고액이면 자녀 확인)
+    // 받는 사람을 person + isNew(처음 보내는 곳인지)로 정리
+    let person, isNew;
     if (key) {
-      buildConfirm(key, amount || 50000, amount ? null : "(금액을 다시 말씀해 주세요)");
-      if (!amount) showToast("금액을 못 들었어요");
-      return;
-    }
-
-    const name = extractRecipientName(textNoAcct) || nameBeforeBank(text);
-    const bank = parseBank(text);
-
-    // 2) 등록 안 된 분이라도 이름/계좌/은행이 있으면 → 막지 않고 토스로 넘김
-    //    (계좌 있으면 자동완성, 없으면 토스 송금화면에서 받는 분 선택) + 아들 알림
-    if (acct || name || bank) {
-      let p;
+      person = getPerson(key); isNew = false;
+    } else {
+      const name = extractRecipientName(textNoAcct) || nameBeforeBank(text);
+      const bank = parseBank(text);
       if (acct) {
         const disp = name || (acct.bank + " ***" + acct.accountNo.slice(-4));
-        p = { key:(name || disp), name:disp, rel:acct.bank + " " + acct.accountNo,
-              bank:acct.bank, accountNo:acct.accountNo, avatar:"🆕", known:false, alias:[name || disp] };
-      } else {
+        person = { key:(name || disp), name:disp, rel:acct.bank + " " + acct.accountNo,
+                   bank:acct.bank, accountNo:acct.accountNo, avatar:"🆕", known:false, alias:[name || disp] };
+        isNew = true;
+      } else if (name || bank) {
         const disp = name || (bank ? bank + "은행" : "받는 분");
-        p = { key:disp, name:disp, rel:(bank ? bank + " · 계좌는 토스에서" : "토스에서 받는 분 선택"),
-              bank:bank || "", accountNo:"", avatar:"❓", known:false, alias:[disp] };
+        person = { key:disp, name:disp, rel:(bank ? bank + " · 계좌는 토스에서" : "토스에서 받는 분 선택"),
+                   bank:bank || "", accountNo:"", avatar:"❓", known:false, alias:[disp] };
+        isNew = true;
+      } else {
+        showToast("누구에게 보낼지 못 알아들었어요. 다시 말씀해 주세요");
+        return;
       }
-      buildConfirmFor(p, amount || 0, amount ? null : "(토스에서 금액 입력)", true);
-      if (!amount) showToast("금액을 못 들었어요 — 토스에서 입력하셔도 돼요");
-      return;
     }
 
-    // 3) 아무것도 못 알아들음
-    showToast("누구에게 보낼지 못 알아들었어요. 다시 말씀해 주세요");
+    // 금액을 들었으면 바로 확인, 못 들었으면 숫자패드로 되묻기
+    if (amount) buildConfirmFor(person, amount, null, isNew);
+    else askAmount(person, isNew);
   }
 
   /* ---------- 확인 화면 만들기 + 안전 가드 ---------- */
@@ -655,12 +716,13 @@
   /* ---------- 화면 전환 ---------- */
   function show(step) {
     document.getElementById('step-listen').style.display = (step === 'listen') ? "block" : "none";
+    document.getElementById('step-amount').classList.toggle('show', step === 'amount');
     document.getElementById('step-confirm').classList.toggle('show', step === 'confirm');
     document.getElementById('step-result').classList.toggle('show', step === 'result');
   }
   function reset() {
     stopSpeak();
-    setTranscript(""); show('listen'); pending = null; lastDeepLink = "";
+    setTranscript(""); show('listen'); pending = null; pendingAmt = null; lastDeepLink = "";
     document.getElementById('dl-panel').style.display = "none";
     document.getElementById('save-new').style.display = "none";
   }
