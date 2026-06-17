@@ -265,10 +265,10 @@
      count(보낸 횟수)·lastUsed(최근 시각)로 자동 정렬되고, localStorage에 저장됩니다.
      bank/accountNo는 supertoss://send 딥링크에 들어갑니다(예시 데이터). */
   const DEFAULT_PEOPLE = [
-    { key:"큰아들", name:"큰아들 김철수",     rel:"국민은행 ***4567",   bank:"국민",     accountNo:"12345601234567", avatar:"👨", known:true, alias:["큰아들","철수","첫째"], count:3, lastUsed:103 },
-    { key:"둘째딸", name:"둘째딸 김영희",     rel:"신한은행 ***6789",   bank:"신한",     accountNo:"110123456789",   avatar:"👩", known:true, alias:["둘째","둘째딸","영희"], count:2, lastUsed:102 },
-    { key:"관리비", name:"행복아파트 관리비", rel:"우리은행 ***8901",   bank:"우리",     accountNo:"1002345678901",  avatar:"🏢", known:true, alias:["관리비","아파트"], count:2, lastUsed:101 },
-    { key:"손녀",   name:"손녀 김지윤",       rel:"카카오뱅크 ***5678", bank:"카카오뱅크", accountNo:"3333012345678", avatar:"👧", known:true, alias:["손녀","지윤"], count:1, lastUsed:100 },
+    { key:"큰아들", name:"큰아들 김철수",     rel:"국민은행 ***4567",   bank:"국민",     accountNo:"12345601234567", avatar:"👨", known:true, alias:["큰아들","철수","철수야","첫째","큰애","장남"], count:3, lastUsed:103 },
+    { key:"둘째딸", name:"둘째딸 김영희",     rel:"신한은행 ***6789",   bank:"신한",     accountNo:"110123456789",   avatar:"👩", known:true, alias:["둘째딸","둘째","영희","영희야","작은딸"], count:2, lastUsed:102 },
+    { key:"관리비", name:"행복아파트 관리비", rel:"우리은행 ***8901",   bank:"우리",     accountNo:"1002345678901",  avatar:"🏢", known:true, alias:["관리비","아파트","관리사무소","아파트관리비"], count:2, lastUsed:101 },
+    { key:"손녀",   name:"손녀 김지윤",       rel:"카카오뱅크 ***5678", bank:"카카오뱅크", accountNo:"3333012345678", avatar:"👧", known:true, alias:["손녀","손녀딸","지윤","지윤이"], count:1, lastUsed:100 },
   ];
   const HIGH_AMOUNT = 300000; // 고액 기준: 30만원 이상이면 자녀 확인 권유
 
@@ -386,27 +386,50 @@
   }
 
   /* ---------- 명령 해석 (데모: 규칙 기반) ----------
-     실서비스: 이 함수가 Claude API 호출로 대체됨 (README 참고).
-     "둘째딸한테 오만원 보내줘" -> { person, amount } */
-  function parseAmount(text) {
-    // 1) 아라비아 숫자 + 만/천원
-    let m = text.replace(/,/g,"").match(/(\d+)\s*만\s*(\d+)?\s*천?/);
-    if (m) return (+m[1])*10000 + (m[2] ? (+m[2])*1000 : 0);
-    m = text.replace(/,/g,"").match(/(\d{3,})\s*원/);
-    if (m) return +m[1];
-    // 2) 한글 숫자(간이): 일~십 + 만/천
-    const K = {영:0,일:1,이:2,삼:3,사:4,오:5,육:6,칠:7,팔:8,구:9,십:10};
-    let man = text.match(/([일이삼사오육칠팔구십]+)\s*만/);
-    let cheon = text.match(/([일이삼사오육칠팔구십]+)\s*천/);
-    function kval(s){ if(!s) return 0; let t=0; if(s.includes("십")){ const a=s.split("십"); t=(a[0]?K[a[0]]:1)*10 + (a[1]?K[a[1]]:0);} else { for(const c of s) t=t*10+(K[c]||0);} return t; }
-    let total = kval(man && man[1])*10000 + kval(cheon && cheon[1])*1000;
-    return total || null;
-  }
-  function findPerson(text) {
-    for (const p of people) {
-      if (p.alias.some(a => text.includes(a))) return p.key;
+     실서비스에선 이 부분이 LLM 해석으로 확장될 수 있지만, 송금 도메인은
+     좁아서 규칙 기반으로 대부분의 표현을 잡습니다. (README 참고)
+     예: "둘째딸한테 오만원 보내줘", "관리비 십이만원 내줘", "손녀 3만5천원" */
+
+  // 한글 숫자 → 정수 (일~구, 십·백·천·만·억 조합 지원)
+  const KO_DIGIT = { 영:0, 공:0, 일:1, 이:2, 삼:3, 사:4, 오:5, 육:6, 륙:6, 칠:7, 팔:8, 구:9 };
+  const KO_SMALL = { 십:10, 백:100, 천:1000 };
+  const KO_BIG = { 만:10000, 억:100000000 };
+  function koreanToNumber(s) {
+    let total = 0, section = 0, num = 0, used = false;
+    for (const ch of s) {
+      if (KO_DIGIT[ch] != null) { num = KO_DIGIT[ch]; used = true; }
+      else if (KO_SMALL[ch] != null) { section += (num || 1) * KO_SMALL[ch]; num = 0; used = true; }
+      else if (KO_BIG[ch] != null) { section += num; total += (section || 1) * KO_BIG[ch]; section = 0; num = 0; used = true; }
     }
+    return used ? total + section + num : null;
+  }
+
+  function parseAmount(text) {
+    const t = text.replace(/[,\s]/g, "");
+    // 1) 아라비아 숫자 + 만/천 (예: 5만, 5만3천, 53000원, 30000)
+    let m = t.match(/(\d+)\s*만(?:\s*(\d+)\s*천)?/);
+    if (m) return (+m[1]) * 10000 + (m[2] ? (+m[2]) * 1000 : 0);
+    m = t.match(/(\d+)\s*천/);
+    if (m) return (+m[1]) * 1000;
+    m = t.match(/(\d{3,})\s*원?/);          // 30000원, 50000
+    if (m) return +m[1];
+    // 2) 한글 숫자 (예: 오만, 십이만, 삼만오천, 백만)
+    const ko = t.match(/[영공일이삼사오육칠팔구십백천만억]+/);
+    if (ko) { const v = koreanToNumber(ko[0]); if (v) return v; }
     return null;
+  }
+
+  // 조사·공백 제거 후 별명 부분일치로 수취인 찾기
+  function findPerson(text) {
+    const t = text.replace(/\s/g, "");
+    let best = null, bestLen = 0;
+    for (const p of people) {
+      for (const a of p.alias) {
+        const an = a.replace(/\s/g, "");
+        if (an && t.includes(an) && an.length > bestLen) { best = p.key; bestLen = an.length; }
+      }
+    }
+    return best; // 가장 구체적인(긴) 별명이 매칭된 사람
   }
   function handleCommand(text) {
     const key = findPerson(text);
